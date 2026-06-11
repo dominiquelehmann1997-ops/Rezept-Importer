@@ -1,6 +1,7 @@
 package de.dml.rezeptimporter.ui
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,12 +13,46 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import de.dml.rezeptimporter.settings.AppSettings
 import de.dml.rezeptimporter.settings.Provider
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var settings: AppSettings
+
+    private val photoUris = mutableStateListOf<Uri>()
+    private var pendingPhotoUri: Uri? = null
+
+    private val takePicture =
+        registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+            val uri = pendingPhotoUri
+            if (ok && uri != null) photoUris.add(uri)
+            pendingPhotoUri = null
+        }
+
+    private fun newPhotoUri(): Uri {
+        val dir = File(cacheDir, "fotos").apply { mkdirs() }
+        val file = File(dir, "rezept-${System.currentTimeMillis()}.jpg")
+        return FileProvider.getUriForFile(this, "de.dml.rezeptimporter.fileprovider", file)
+    }
+
+    private fun capturePhoto() {
+        val uri = newPhotoUri()
+        pendingPhotoUri = uri
+        takePicture.launch(uri)
+    }
+
+    private fun startImportFromPhotos() {
+        val intent = Intent(this, ShareActivity::class.java).apply {
+            action = Intent.ACTION_SEND_MULTIPLE
+            type = "image/*"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(photoUris))
+        }
+        startActivity(intent)
+        photoUris.clear()
+    }
 
     private val pickFolder =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -55,6 +90,24 @@ class MainActivity : ComponentActivity() {
                     Text(if (vaultUri.isEmpty()) "— nicht gewählt —" else vaultUri,
                         style = MaterialTheme.typography.bodySmall)
                     Button(onClick = { pickFolder.launch(null) }) { Text("Ordner wählen") }
+
+                    HorizontalDivider()
+
+                    Text("Rezept fotografieren", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (photoUris.isEmpty()) "Fotos landen nur im App-Cache, nie in der Galerie."
+                        else "${photoUris.size} Foto(s) aufgenommen.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { capturePhoto() }) {
+                            Text(if (photoUris.isEmpty()) "Foto aufnehmen" else "Weiteres Foto")
+                        }
+                        if (photoUris.isNotEmpty()) {
+                            Button(onClick = { startImportFromPhotos() }) { Text("Rezept erstellen") }
+                            OutlinedButton(onClick = { photoUris.clear() }) { Text("Verwerfen") }
+                        }
+                    }
 
                     HorizontalDivider()
 

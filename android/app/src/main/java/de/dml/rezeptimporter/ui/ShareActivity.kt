@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 sealed interface ImportState {
@@ -71,7 +72,7 @@ class ShareActivity : ComponentActivity() {
                     is ImportState.Preview -> PreviewScreen(
                         initial = s.draft,
                         onSave = ::save,
-                        onCancel = { finish() },
+                        onCancel = { clearPhotoCache(); finish() },
                     )
                     is ImportState.Error -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally,
@@ -161,10 +162,16 @@ class ShareActivity : ComponentActivity() {
                     "Gespeichert: ${result.fileName} (id: ${result.id})",
                     Toast.LENGTH_LONG,
                 ).show()
+                clearPhotoCache()
                 finish()
             } catch (e: Exception) {
                 state.value = ImportState.Error("Speichern fehlgeschlagen: ${e.message}")
             }
         }
+    }
+
+    /** In-App aufgenommene Fotos (cache/fotos/) nach dem Import aufräumen. */
+    private fun clearPhotoCache() {
+        File(cacheDir, "fotos").listFiles()?.forEach { it.delete() }
     }
 }
