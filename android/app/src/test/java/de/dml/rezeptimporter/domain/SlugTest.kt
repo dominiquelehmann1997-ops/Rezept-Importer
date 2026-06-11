@@ -10,4 +10,6 @@ class SlugTest {
     @Test fun collapsesDashes() = assertEquals("a-b", Slug.fromName("a --- b"))
     @Test fun trimsDashes() = assertEquals("abc", Slug.fromName("  abc  "))
     @Test fun digitsKept() = assertEquals("5-minuten-brot", Slug.fromName("5-Minuten-Brot"))
+    @Test fun emptyWhenNoAlphanumerics() = assertEquals("", Slug.fromName("!!!"))
+    @Test fun underscoresBecomeDashes() = assertEquals("pasta-al-pomodoro", Slug.fromName("Pasta_al_Pomodoro"))
 }
