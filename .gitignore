@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.keystore
+!debug.keystore
+
+# OS
+Thumbs.db
+.DS_Store
