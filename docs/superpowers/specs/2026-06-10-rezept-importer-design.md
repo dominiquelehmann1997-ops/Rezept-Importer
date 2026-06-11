@@ -69,8 +69,9 @@ Write — verhindert LLM-Müll im Vault, kostet bei gutem Ergebnis einen Tap.
 - `id` wird deterministisch app-seitig aus `name` erzeugt (kebab-case,
   `[a-z0-9-]`), nie vom LLM.
 - Kollisionscheck vor dem Write: Frontmatter-Scan der `.md` im Vault-Ordner.
-  Bei Treffer Dialog: überschreiben (Update, gleicher Slug) oder Suffix `-2`
-  (neues Rezept). Kein stilles last-write-wins.
+  Phase 1: bei Treffer automatisch Suffix `-2` + Hinweis (nie stilles
+  Überschreiben). Phase 4: Dialog mit Wahl — überschreiben (Update, gleicher
+  Slug) oder Suffix (neues Rezept).
 - Einmal geschriebenes `id` wird nie geändert (Contract Abschnitt 3).
 
 ## LLM-Stufe & Token-Budget
