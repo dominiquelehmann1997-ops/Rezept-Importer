@@ -51,3 +51,10 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
+
+// Schema aus shared/ ist die eine Quelle der Wahrheit — vor jedem Build in assets spiegeln.
+val syncSchema by tasks.registering(Copy::class) {
+    from(rootProject.layout.projectDirectory.file("../shared/recipe-vault-frontmatter.schema.json"))
+    into(layout.projectDirectory.dir("src/main/assets"))
+}
+tasks.named("preBuild") { dependsOn(syncSchema) }

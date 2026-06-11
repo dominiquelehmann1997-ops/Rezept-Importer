@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://haushalts-dashboard/recipe-vault-frontmatter.schema.json",
+  "title": "RecipeFrontmatter",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "Stabiler eindeutiger Slug (kebab-case). Identitäts-Anker, nie ändern."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Pflicht. Leer/fehlend ⇒ Datei verworfen."
+    },
+    "rating": {
+      "type": "string",
+      "enum": ["favorit", "ok", "selten"],
+      "description": "Default 'ok' bei Fehlen/ungültig."
+    },
+    "simple": { "type": "boolean", "description": "Default true." },
+    "reheatable": { "type": "boolean", "description": "Default false." },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Wird als JSON-String gespeichert."
+    },
+    "ingredients": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "amount": {
+            "type": ["string", "number", "null"],
+            "description": "Brüche/Bereiche als String ('1/2', '2-3')."
+          },
+          "unit": { "type": ["string", "number", "null"] },
+          "freshness": {
+            "type": ["string", "null"],
+            "enum": ["frisch", "haltbar", null],
+            "description": "Alles andere ⇒ null ⇒ Heuristik."
+          }
+        }
+      }
+    },
+    "servings": { "type": "number", "exclusiveMinimum": 0, "description": "Nur Obsidian-Kochansicht; Ingest ignoriert." },
+    "prepMinutes": { "type": "number", "minimum": 0 },
+    "cookMinutes": { "type": "number", "minimum": 0 },
+    "nutrition": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    }
+  }
+}
