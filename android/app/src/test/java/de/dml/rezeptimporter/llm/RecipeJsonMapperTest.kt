@@ -49,4 +49,29 @@ class RecipeJsonMapperTest {
         val draft = RecipeJsonMapper.fromJson(json)
         assertEquals(null, draft.ingredients[0].freshness)
     }
+
+    @Test(expected = LlmException::class)
+    fun throwsLlmExceptionOnMissingName() {
+        RecipeJsonMapper.fromJson(
+            Json.parseToJsonElement("""{"ingredients":[],"steps":[]}""").jsonObject
+        )
+    }
+
+    @Test
+    fun toleratesWrongTypedElements() {
+        val json = Json.parseToJsonElement(
+            """{"name":"X","tags":[{"x":1}],"ingredients":[{"name":"Reis","amount":{"v":400}}],"steps":["ok",["nested"]]}"""
+        ).jsonObject
+        val draft = RecipeJsonMapper.fromJson(json)
+        assertEquals(emptyList<String>(), draft.tags)            // Objekt-Element verworfen
+        assertEquals(null, draft.ingredients[0].amount)           // Objekt-amount ⇒ null
+        assertEquals(listOf("ok"), draft.steps)                   // verschachteltes Array verworfen
+    }
+
+    @Test(expected = LlmException::class)
+    fun throwsLlmExceptionOnNonArrayIngredients() {
+        RecipeJsonMapper.fromJson(
+            Json.parseToJsonElement("""{"name":"X","ingredients":"keine","steps":[]}""").jsonObject
+        )
+    }
 }

@@ -7,20 +7,34 @@ import kotlinx.serialization.json.*
 object RecipeJsonMapper {
     private val FRESHNESS = setOf("frisch", "haltbar")
 
-    fun fromJson(obj: JsonObject): RecipeDraft {
-        val name = obj["name"]?.jsonPrimitive?.contentOrNull?.trim()
+    private fun JsonElement?.stringOrNull(): String? =
+        (this as? JsonPrimitive)?.contentOrNull
+
+    private fun JsonElement?.intOrNullSafe(): Int? =
+        (this as? JsonPrimitive)?.intOrNull
+
+    fun fromJson(obj: JsonObject): RecipeDraft = try {
+        fromJsonUnsafe(obj)
+    } catch (e: LlmException) {
+        throw e
+    } catch (e: Exception) {
+        throw LlmException("LLM-Antwort hat unerwartete Struktur: ${e.message}", e)
+    }
+
+    private fun fromJsonUnsafe(obj: JsonObject): RecipeDraft {
+        val name = obj["name"].stringOrNull()?.trim()
             ?: throw LlmException("LLM-Antwort ohne 'name'")
         if (name.isEmpty()) throw LlmException("LLM-Antwort mit leerem 'name'")
 
         val ingredients = obj["ingredients"]?.jsonArray.orEmpty().mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
-            val ingName = o["name"]?.jsonPrimitive?.contentOrNull?.trim()
+            val ingName = o["name"].stringOrNull()?.trim()
                 ?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             IngredientDraft(
                 name = ingName,
-                amount = o["amount"]?.jsonPrimitive?.contentOrNull,
-                unit = o["unit"]?.jsonPrimitive?.contentOrNull,
-                freshness = o["freshness"]?.jsonPrimitive?.contentOrNull
+                amount = o["amount"].stringOrNull(),
+                unit = o["unit"].stringOrNull(),
+                freshness = o["freshness"].stringOrNull()
                     ?.takeIf { it in FRESHNESS },
             )
         }
@@ -28,13 +42,13 @@ object RecipeJsonMapper {
         return RecipeDraft(
             name = name,
             tags = obj["tags"]?.jsonArray.orEmpty()
-                .mapNotNull { it.jsonPrimitive.contentOrNull },
-            servings = obj["servings"]?.jsonPrimitive?.intOrNull,
-            prepMinutes = obj["prepMinutes"]?.jsonPrimitive?.intOrNull,
-            cookMinutes = obj["cookMinutes"]?.jsonPrimitive?.intOrNull,
+                .mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+            servings = obj["servings"].intOrNullSafe(),
+            prepMinutes = obj["prepMinutes"].intOrNullSafe(),
+            cookMinutes = obj["cookMinutes"].intOrNullSafe(),
             ingredients = ingredients,
             steps = obj["steps"]?.jsonArray.orEmpty()
-                .mapNotNull { it.jsonPrimitive.contentOrNull },
+                .mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
         )
     }
 }
