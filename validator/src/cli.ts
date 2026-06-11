@@ -15,7 +15,15 @@ for (const file of files) {
   if (basename(file).startsWith("_")) {
     problems.push("filename starts with '_' — ingest skips this file");
   }
-  const raw = readFileSync(file, "utf8");
+  let raw: string;
+  try {
+    raw = readFileSync(file, "utf8");
+  } catch (e) {
+    failed = true;
+    console.log(`FAIL ${file}`);
+    console.log(`  - file not found or unreadable: ${String(e).split("\n")[0]}`);
+    continue;
+  }
   problems.push(...validateFrontmatter(raw));
   const { recipe, errors } = parseRecipeMarkdown(raw);
   problems.push(...errors);

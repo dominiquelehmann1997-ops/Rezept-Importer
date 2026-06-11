@@ -9,7 +9,7 @@ const schema = JSON.parse(
   ),
 );
 
-const ajv = new Ajv2020({ allErrors: true });
+const ajv = new Ajv2020({ allErrors: true, allowUnionTypes: true });
 const validateFn = ajv.compile(schema);
 
 export function validateFrontmatter(raw: string): string[] {
