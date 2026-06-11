@@ -45,6 +45,9 @@ class RecipeMarkdownWriter {
         val body = buildString {
             if (draft.ingredients.isNotEmpty()) {
                 appendLine("## Zutaten")
+                // Basis-Portionen sichtbar im Text — die Kochansicht skaliert gegen Frontmatter-servings,
+                // aber der Nutzer muss den Ausgangswert auch ohne aktive View sehen.
+                draft.servings?.let { appendLine("*Für $it ${if (it == 1) "Portion" else "Portionen"}*") }
                 draft.ingredients.forEach { appendLine("- ${ingredientLine(it)}") }
                 appendLine()
             }

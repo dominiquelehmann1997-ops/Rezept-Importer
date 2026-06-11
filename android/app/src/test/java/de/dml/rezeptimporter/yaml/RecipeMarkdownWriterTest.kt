@@ -104,6 +104,40 @@ class RecipeMarkdownWriterTest {
     }
 
     @Test
+    fun rendersServingsLineInBody() {
+        val draft = RecipeDraft(
+            name = "X",
+            servings = 4,
+            ingredients = listOf(IngredientDraft("Reis", "250", "g")),
+            steps = listOf("Kochen."),
+        )
+        val body = writer.render("x", draft).substringAfter("\n---\n")
+        assertTrue(body.contains("## Zutaten"))
+        assertTrue(body.contains("*Für 4 Portionen*"))
+        // Frontmatter behält servings zusätzlich
+        assertEquals(4, frontmatterOf(writer.render("x", draft))["servings"])
+    }
+
+    @Test
+    fun servingsLineUsesSingularForOne() {
+        val draft = RecipeDraft(
+            name = "X",
+            servings = 1,
+            ingredients = listOf(IngredientDraft("Ei")),
+            steps = listOf("Kochen."),
+        )
+        val body = writer.render("x", draft).substringAfter("\n---\n")
+        assertTrue(body.contains("*Für 1 Portion*"))
+    }
+
+    @Test
+    fun omitsServingsLineWhenAbsent() {
+        val draft = RecipeDraft(name = "X", ingredients = listOf(IngredientDraft("Ei")))
+        val body = writer.render("x", draft).substringAfter("\n---\n")
+        assertTrue(!body.contains("Portion"))
+    }
+
+    @Test
     fun rendersNutritionInFrontmatterAndBody() {
         val draft = RecipeDraft(
             name = "X",
