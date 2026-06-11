@@ -18,6 +18,7 @@ import de.dml.rezeptimporter.llm.FallbackExtractor
 import de.dml.rezeptimporter.llm.GeminiExtractor
 import de.dml.rezeptimporter.llm.HaikuExtractor
 import de.dml.rezeptimporter.llm.LlmExtractor
+import de.dml.rezeptimporter.link.RecipeLinkResolver
 import de.dml.rezeptimporter.ocr.OcrTextExtractor
 import de.dml.rezeptimporter.pipeline.ImportPipeline
 import de.dml.rezeptimporter.pipeline.isBareUrl
@@ -108,17 +109,18 @@ class ShareActivity : ComponentActivity() {
                     state.value = ImportState.Error("Kein Vault-Ordner gewählt — erst App öffnen und Ordner wählen.")
                     return@launch
                 }
-                val rawText = collectSourceText()
-                if (rawText.isBlank()) {
+                val source = collectSourceText()
+                if (source.isBlank()) {
                     state.value = ImportState.Error("Kein Text gefunden (OCR leer?). Tipp: Screenshot mit gut lesbarem Text teilen.")
                     return@launch
                 }
-                if (isBareUrl(rawText)) {
-                    state.value = ImportState.Error(
-                        "Das ist nur ein Link. Reel-/Web-Links werden erst in Phase 2 unterstützt.\n" +
-                        "Tipp: Screenshot der Caption teilen oder Text kopieren."
-                    )
-                    return@launch
+                // Reiner Link: erst zu Rezept-Text auflösen (Web-Portale via JSON-LD,
+                // TikTok/Instagram via Caption), dann durch dieselbe LLM-Pipeline. Schlägt das
+                // fehl, landet die LinkResolveException im äußeren catch als Fehlermeldung.
+                val rawText = if (isBareUrl(source)) {
+                    RecipeLinkResolver(httpClient).resolve(source)
+                } else {
+                    source
                 }
                 val pipeline = ImportPipeline(buildExtractor(), validator, markdownWriter)
                 state.value = ImportState.Preview(pipeline.extractValidated(rawText))
