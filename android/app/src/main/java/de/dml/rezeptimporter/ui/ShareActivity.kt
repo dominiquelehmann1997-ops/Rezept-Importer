@@ -18,6 +18,7 @@ import de.dml.rezeptimporter.llm.GeminiExtractor
 import de.dml.rezeptimporter.llm.HaikuExtractor
 import de.dml.rezeptimporter.ocr.OcrTextExtractor
 import de.dml.rezeptimporter.pipeline.ImportPipeline
+import de.dml.rezeptimporter.pipeline.isBareUrl
 import de.dml.rezeptimporter.settings.AppSettings
 import de.dml.rezeptimporter.settings.Provider
 import de.dml.rezeptimporter.validate.RecipeValidator
@@ -106,6 +107,13 @@ class ShareActivity : ComponentActivity() {
                 val rawText = collectSourceText()
                 if (rawText.isBlank()) {
                     state.value = ImportState.Error("Kein Text gefunden (OCR leer?). Tipp: Screenshot mit gut lesbarem Text teilen.")
+                    return@launch
+                }
+                if (isBareUrl(rawText)) {
+                    state.value = ImportState.Error(
+                        "Das ist nur ein Link. Reel-/Web-Links werden erst in Phase 2 unterstützt.\n" +
+                        "Tipp: Screenshot der Caption teilen oder Text kopieren."
+                    )
                     return@launch
                 }
                 val pipeline = ImportPipeline(buildExtractor(), validator, markdownWriter)

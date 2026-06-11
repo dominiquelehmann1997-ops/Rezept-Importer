@@ -55,4 +55,28 @@ class ImportPipelineTest {
         }
         ImportPipeline(alwaysBad, validator, writer).extractValidated("text")
     }
+
+    @Test
+    fun retriesWhenFirstCallThrowsSemanticLlmException() = runTest {
+        var call = 0
+        val flaky = object : LlmExtractor {
+            override suspend fun extract(rawText: String, repairHint: String?): RecipeDraft {
+                call++
+                if (call == 1) throw LlmException("LLM-Antwort mit leerem 'name'")
+                return good
+            }
+        }
+        val draft = ImportPipeline(flaky, validator, writer).extractValidated("text")
+        assertEquals("Curry", draft.name)
+        assertEquals(2, call)
+    }
+
+    @Test(expected = LlmException::class)
+    fun doesNotRetryMoreThanOnceOnThrows() = runTest {
+        val alwaysThrows = object : LlmExtractor {
+            override suspend fun extract(rawText: String, repairHint: String?): RecipeDraft =
+                throw LlmException("kaputt")
+        }
+        ImportPipeline(alwaysThrows, validator, writer).extractValidated("text")
+    }
 }

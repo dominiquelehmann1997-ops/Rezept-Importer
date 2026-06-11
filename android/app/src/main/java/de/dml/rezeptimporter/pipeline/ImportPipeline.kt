@@ -4,8 +4,13 @@ import de.dml.rezeptimporter.domain.RecipeDraft
 import de.dml.rezeptimporter.domain.Slug
 import de.dml.rezeptimporter.llm.LlmException
 import de.dml.rezeptimporter.llm.LlmExtractor
+import de.dml.rezeptimporter.llm.LlmTransportException
 import de.dml.rezeptimporter.validate.RecipeValidator
 import de.dml.rezeptimporter.yaml.RecipeMarkdownWriter
+
+/** true, wenn der geteilte Text nur aus einer einzelnen URL besteht (Reel/TikTok/Web-Link). */
+fun isBareUrl(text: String): Boolean =
+    Regex("^https?://\\S+$").matches(text.trim())
 
 class ImportPipeline(
     private val extractor: LlmExtractor,
@@ -17,14 +22,25 @@ class ImportPipeline(
      * (1 Extraktion + 1 Repair-Retry mit Fehlerliste). Danach LlmException.
      */
     suspend fun extractValidated(rawText: String): RecipeDraft {
-        val first = extractor.extract(rawText)
-        val firstProblems = problemsOf(first)
-        if (firstProblems.isEmpty()) return first
+        val firstProblems: List<String>
+        try {
+            val first = extractor.extract(rawText)
+            val problems = problemsOf(first)
+            if (problems.isEmpty()) return first
+            firstProblems = problems
+        } catch (e: LlmTransportException) {
+            throw e   // Technik-Fehler: Retry sinnlos, Fallback-Logik liegt im Extractor
+        } catch (e: LlmException) {
+            // Semantischer Fehlschlag (z.B. leerer Name) — ein Repair-Versuch
+            val second = extractor.extract(rawText, repairHint = e.message ?: "ungültige Antwort")
+            val secondProblems = problemsOf(second)
+            if (secondProblems.isEmpty()) return second
+            throw LlmException("Extraktion nach Repair-Retry weiterhin ungültig: ${secondProblems.joinToString("; ")}")
+        }
 
         val second = extractor.extract(rawText, repairHint = firstProblems.joinToString("; "))
         val secondProblems = problemsOf(second)
         if (secondProblems.isEmpty()) return second
-
         throw LlmException("Extraktion nach Repair-Retry weiterhin ungültig: ${secondProblems.joinToString("; ")}")
     }
 

@@ -10,4 +10,7 @@ interface LlmExtractor {
     suspend fun extract(rawText: String, repairHint: String? = null): RecipeDraft
 }
 
-class LlmException(message: String, cause: Throwable? = null) : Exception(message, cause)
+open class LlmException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+/** Technischer Fehler (HTTP non-2xx, Timeout, Netz) — Kandidat für Provider-Fallback, kein Repair-Retry. */
+class LlmTransportException(message: String, cause: Throwable? = null) : LlmException(message, cause)
