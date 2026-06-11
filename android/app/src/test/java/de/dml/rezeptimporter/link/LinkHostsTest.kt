@@ -15,4 +15,13 @@ class LinkHostsTest {
         assertTrue(LinkHosts.isTikTok("https://www.tiktok.com/@x/video/1"))
         assertFalse(LinkHosts.isInstagram("https://www.tiktok.com/@x/video/1"))
     }
+
+    @Test fun youtubeLong() = assertTrue(LinkHosts.isYouTube("https://www.youtube.com/watch?v=abc"))
+    @Test fun youtubeShort() = assertTrue(LinkHosts.isYouTube("https://youtu.be/abc"))
+    @Test fun youtubeMobile() = assertTrue(LinkHosts.isYouTube("https://m.youtube.com/watch?v=abc"))
+    @Test fun youtubeNotSocialNotWeb() {
+        assertTrue(LinkHosts.isYouTube("https://youtu.be/abc"))
+        assertFalse(LinkHosts.isSocial("https://youtu.be/abc"))
+    }
+    @Test fun blogNotYouTube() = assertFalse(LinkHosts.isYouTube("https://www.chefkoch.de/x.html"))
 }

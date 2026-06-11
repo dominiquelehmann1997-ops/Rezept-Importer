@@ -11,5 +11,8 @@ internal object LinkHosts {
     fun isInstagram(url: String): Boolean =
         host(url)?.let { it.contains("instagram") || it.contains("instagr.am") } == true
 
+    fun isYouTube(url: String): Boolean =
+        host(url)?.let { it.contains("youtube.") || it == "youtu.be" || it.endsWith(".youtu.be") } == true
+
     fun isSocial(url: String): Boolean = isTikTok(url) || isInstagram(url)
 }
