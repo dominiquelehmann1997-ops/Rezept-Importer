@@ -2,7 +2,7 @@ package de.dml.rezeptimporter.llm
 
 object ExtractionPrompt {
     const val MAX_INPUT_CHARS = 6000
-    const val MAX_OUTPUT_TOKENS = 1500
+    const val MAX_OUTPUT_TOKENS = 4096
 
     val INSTRUCTION = """
         Du extrahierst Kochrezepte aus rohem Text (OCR-Ergebnisse, Social-Media-Captions).
@@ -13,6 +13,9 @@ object ExtractionPrompt {
         - "freshness" nur wenn eindeutig: "frisch" (Gemüse, Obst, Fleisch, Fisch, Milchprodukte, Kräuter),
           "haltbar" (Trockenvorrat, Konserven, Gewürze, Öl). Im Zweifel weglassen.
         - "steps": die Zubereitungsschritte als einzelne, vollständige Sätze.
+        - "nutrition" nur befüllen, wenn Nährwerte im Text explizit genannt sind: kcal (Energie),
+          protein/carbs/fat in Gramm (nur Zahl, ohne Einheit). "basis" = Bezug wie im Text,
+          z.B. "pro Portion" oder "pro 100g". Nährwerte niemals schätzen oder berechnen.
         - Unbekannte Felder weglassen. Nichts erfinden.
     """.trimIndent()
 
@@ -40,7 +43,18 @@ object ExtractionPrompt {
             "additionalProperties": false
           }
         },
-        "steps": {"type": "array", "items": {"type": "string"}}
+        "steps": {"type": "array", "items": {"type": "string"}},
+        "nutrition": {
+          "type": "object",
+          "properties": {
+            "basis": {"type": "string"},
+            "kcal": {"type": "integer"},
+            "protein": {"type": "number"},
+            "carbs": {"type": "number"},
+            "fat": {"type": "number"}
+          },
+          "additionalProperties": false
+        }
       },
       "required": ["name", "ingredients", "steps"],
       "additionalProperties": false

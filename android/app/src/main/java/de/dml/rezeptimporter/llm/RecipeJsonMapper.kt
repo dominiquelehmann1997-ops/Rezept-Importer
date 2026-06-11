@@ -1,6 +1,7 @@
 package de.dml.rezeptimporter.llm
 
 import de.dml.rezeptimporter.domain.IngredientDraft
+import de.dml.rezeptimporter.domain.NutritionDraft
 import de.dml.rezeptimporter.domain.RecipeDraft
 import kotlinx.serialization.json.*
 
@@ -12,6 +13,21 @@ object RecipeJsonMapper {
 
     private fun JsonElement?.intOrNullSafe(): Int? =
         (this as? JsonPrimitive)?.intOrNull
+
+    private fun JsonElement?.doubleOrNullSafe(): Double? =
+        (this as? JsonPrimitive)?.doubleOrNull
+
+    private fun parseNutrition(el: JsonElement?): NutritionDraft? {
+        val o = el as? JsonObject ?: return null
+        val n = NutritionDraft(
+            basis = o["basis"].stringOrNull()?.trim()?.takeIf { it.isNotEmpty() },
+            kcal = o["kcal"].intOrNullSafe(),
+            protein = o["protein"].doubleOrNullSafe(),
+            carbs = o["carbs"].doubleOrNullSafe(),
+            fat = o["fat"].doubleOrNullSafe(),
+        )
+        return if (n.isEmpty) null else n
+    }
 
     fun fromJson(obj: JsonObject): RecipeDraft = try {
         fromJsonUnsafe(obj)
@@ -49,6 +65,7 @@ object RecipeJsonMapper {
             ingredients = ingredients,
             steps = obj["steps"]?.jsonArray.orEmpty()
                 .mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+            nutrition = parseNutrition(obj["nutrition"]),
         )
     }
 }

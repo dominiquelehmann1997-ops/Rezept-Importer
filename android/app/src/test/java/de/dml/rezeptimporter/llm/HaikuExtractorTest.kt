@@ -54,7 +54,7 @@ class HaikuExtractorTest {
         val body = req.body.readUtf8()
         assertTrue(body.contains("\"claude-haiku-4-5\""))
         assertTrue(body.contains("\"save_recipe\""))
-        assertTrue(body.contains("\"max_tokens\":1500"))
+        assertTrue(body.contains("\"max_tokens\":4096"))
     }
 
     @Test

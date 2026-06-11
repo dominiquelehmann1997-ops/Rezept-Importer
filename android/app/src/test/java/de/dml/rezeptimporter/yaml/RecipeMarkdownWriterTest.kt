@@ -1,6 +1,7 @@
 package de.dml.rezeptimporter.yaml
 
 import de.dml.rezeptimporter.domain.IngredientDraft
+import de.dml.rezeptimporter.domain.NutritionDraft
 import de.dml.rezeptimporter.domain.RecipeDraft
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -81,6 +82,55 @@ class RecipeMarkdownWriterTest {
         val ings = fm["ingredients"] as List<Map<String, Any?>>
         assertEquals("1,5", ings[0]["amount"])
         assertEquals("2-3", ings[1]["amount"])
+    }
+
+    @Test
+    fun rendersIngredientsAsReadableBodySection() {
+        val draft = RecipeDraft(
+            name = "X",
+            ingredients = listOf(
+                IngredientDraft("Grillkäse", "200", "g"),
+                IngredientDraft("Salz"),
+            ),
+            steps = listOf("Mischen."),
+        )
+        val md = writer.render("x", draft)
+        val body = md.substringAfter("\n---\n")
+        assertTrue(body.contains("## Zutaten"))
+        assertTrue(body.contains("- 200 g Grillkäse"))
+        assertTrue(body.contains("- Salz"))
+        // Frontmatter bleibt zusätzlich erhalten
+        assertTrue(frontmatterOf(md).containsKey("ingredients"))
+    }
+
+    @Test
+    fun rendersNutritionInFrontmatterAndBody() {
+        val draft = RecipeDraft(
+            name = "X",
+            nutrition = NutritionDraft(
+                basis = "pro Portion", kcal = 520, protein = 28.0, carbs = 31.5, fat = 30.0,
+            ),
+        )
+        val md = writer.render("x", draft)
+        val body = md.substringAfter("\n---\n")
+        assertTrue(body.contains("## Nährwerte"))
+        assertTrue(body.contains("*pro Portion*"))
+        assertTrue(body.contains("- Energie: 520 kcal"))
+        assertTrue(body.contains("- Eiweiß: 28 g"))        // .0 getrimmt
+        assertTrue(body.contains("- Kohlenhydrate: 31.5 g"))
+        assertTrue(body.contains("- Fett: 30 g"))
+
+        @Suppress("UNCHECKED_CAST")
+        val nut = frontmatterOf(md)["nutrition"] as Map<String, Any?>
+        assertEquals(520, nut["kcal"])
+        assertEquals("pro Portion", nut["basis"])
+    }
+
+    @Test
+    fun omitsNutritionWhenAbsent() {
+        val md = writer.render("x", RecipeDraft(name = "X"))
+        assertTrue(!md.contains("## Nährwerte"))
+        assertTrue(!frontmatterOf(md).containsKey("nutrition"))
     }
 
     @Test

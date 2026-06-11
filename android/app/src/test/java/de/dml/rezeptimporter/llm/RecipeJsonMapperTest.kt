@@ -68,6 +68,31 @@ class RecipeJsonMapperTest {
         assertEquals(listOf("ok"), draft.steps)                   // verschachteltes Array verworfen
     }
 
+    @Test
+    fun parsesNutritionWhenPresent() {
+        val json = Json.parseToJsonElement(
+            """{"name":"X","ingredients":[],"steps":[],
+               "nutrition":{"basis":"pro Portion","kcal":520,"protein":28,"carbs":31.5,"fat":30}}"""
+        ).jsonObject
+        val draft = RecipeJsonMapper.fromJson(json)
+        assertEquals("pro Portion", draft.nutrition?.basis)
+        assertEquals(520, draft.nutrition?.kcal)
+        assertEquals(28.0, draft.nutrition?.protein)
+        assertEquals(31.5, draft.nutrition?.carbs)
+    }
+
+    @Test
+    fun nutritionNullWhenEmptyOrAbsent() {
+        val absent = RecipeJsonMapper.fromJson(
+            Json.parseToJsonElement("""{"name":"X","ingredients":[],"steps":[]}""").jsonObject
+        )
+        assertEquals(null, absent.nutrition)
+        val empty = RecipeJsonMapper.fromJson(
+            Json.parseToJsonElement("""{"name":"X","ingredients":[],"steps":[],"nutrition":{}}""").jsonObject
+        )
+        assertEquals(null, empty.nutrition)
+    }
+
     @Test(expected = LlmException::class)
     fun throwsLlmExceptionOnNonArrayIngredients() {
         RecipeJsonMapper.fromJson(

@@ -13,6 +13,22 @@ data class IngredientDraft(
 )
 
 @Serializable
+data class NutritionDraft(
+    /** Bezugsgröße laut Quelle, z.B. "pro Portion" | "pro 100g". */
+    val basis: String? = null,
+    val kcal: Int? = null,
+    /** Gramm */
+    val protein: Double? = null,
+    /** Gramm */
+    val carbs: Double? = null,
+    /** Gramm */
+    val fat: Double? = null,
+) {
+    val isEmpty: Boolean
+        get() = kcal == null && protein == null && carbs == null && fat == null
+}
+
+@Serializable
 data class RecipeDraft(
     val name: String,
     val tags: List<String> = emptyList(),
@@ -21,6 +37,7 @@ data class RecipeDraft(
     val cookMinutes: Int? = null,
     val ingredients: List<IngredientDraft> = emptyList(),
     val steps: List<String> = emptyList(),
+    val nutrition: NutritionDraft? = null,
     // Nicht vom LLM befüllt — Defaults laut Contract, im Preview togglebar:
     val rating: String = "ok",
     val simple: Boolean = true,

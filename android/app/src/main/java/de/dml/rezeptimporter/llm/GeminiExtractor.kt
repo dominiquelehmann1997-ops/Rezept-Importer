@@ -47,6 +47,16 @@ class GeminiExtractor(
             putJsonObject("steps") {
                 put("type", "ARRAY"); putJsonObject("items") { put("type", "STRING") }
             }
+            putJsonObject("nutrition") {
+                put("type", "OBJECT")
+                putJsonObject("properties") {
+                    putJsonObject("basis") { put("type", "STRING") }
+                    putJsonObject("kcal") { put("type", "INTEGER") }
+                    putJsonObject("protein") { put("type", "NUMBER") }
+                    putJsonObject("carbs") { put("type", "NUMBER") }
+                    putJsonObject("fat") { put("type", "NUMBER") }
+                }
+            }
         }
         putJsonArray("required") { add("name"); add("ingredients"); add("steps") }
     }
@@ -80,6 +90,9 @@ class GeminiExtractor(
                 put("responseMimeType", "application/json")
                 put("responseSchema", responseSchema)
                 put("maxOutputTokens", ExtractionPrompt.MAX_OUTPUT_TOKENS)
+                // gemini-2.5-flash denkt per Default (dynamic thinking) und verbraucht
+                // damit das maxOutputTokens-Budget -> JSON wird abgeschnitten. Aus.
+                putJsonObject("thinkingConfig") { put("thinkingBudget", 0) }
             }
         }
 
@@ -95,8 +108,14 @@ class GeminiExtractor(
                 throw LlmTransportException("Gemini HTTP ${resp.code}: ${text.take(300)}")
             }
             val root = Json.parseToJsonElement(text).jsonObject
-            val payload = root["candidates"]?.jsonArray?.firstOrNull()
-                ?.jsonObject?.get("content")?.jsonObject
+            val candidate = root["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
+            val finishReason = candidate?.get("finishReason")?.jsonPrimitive?.contentOrNull
+            if (finishReason == "MAX_TOKENS") {
+                throw LlmException("Rezept zu lang fuer das Token-Budget (abgeschnitten). " +
+                    "Weniger Text teilen oder maxOutputTokens erhoehen.")
+            }
+            val payload = candidate
+                ?.get("content")?.jsonObject
                 ?.get("parts")?.jsonArray?.firstOrNull()
                 ?.jsonObject?.get("text")?.jsonPrimitive?.content
                 ?: throw LlmException("Gemini-Antwort ohne candidates/parts/text")

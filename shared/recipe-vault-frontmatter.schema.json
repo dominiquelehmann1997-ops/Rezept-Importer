@@ -55,7 +55,14 @@
     "cookMinutes": { "type": "number", "minimum": 0 },
     "nutrition": {
       "type": "object",
-      "additionalProperties": { "type": "number" }
+      "additionalProperties": false,
+      "properties": {
+        "basis": { "type": "string", "description": "Bezugsgröße, z.B. 'pro Portion' | 'pro 100g'." },
+        "kcal": { "type": "number", "minimum": 0 },
+        "protein": { "type": "number", "minimum": 0 },
+        "carbs": { "type": "number", "minimum": 0 },
+        "fat": { "type": "number", "minimum": 0 }
+      }
     }
   }
 }

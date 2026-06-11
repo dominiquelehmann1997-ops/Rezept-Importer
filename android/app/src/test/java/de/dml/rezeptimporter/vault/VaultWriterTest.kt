@@ -1,6 +1,7 @@
 package de.dml.rezeptimporter.vault
 
 import de.dml.rezeptimporter.domain.IngredientDraft
+import de.dml.rezeptimporter.domain.NutritionDraft
 import de.dml.rezeptimporter.domain.RecipeDraft
 import de.dml.rezeptimporter.validate.RecipeValidator
 import de.dml.rezeptimporter.yaml.RecipeMarkdownWriter
@@ -71,6 +72,20 @@ class VaultWriterTest {
         // Name nur aus Sonderzeichen ⇒ leerer Slug ⇒ id verletzt Schema-Pattern ⇒ Write verweigert
         val storage = FakeVaultStorage()
         writer(storage).write(draft.copy(name = "!!!"))
+    }
+
+    @Test
+    fun writesRecipeWithNutritionIncludingStringBasis() {
+        // Regression: nutrition.basis ist String; Schema darf nicht "number" erzwingen.
+        val storage = FakeVaultStorage()
+        val withNutrition = draft.copy(
+            nutrition = NutritionDraft(
+                basis = "pro Portion", kcal = 520, protein = 28.0, carbs = 31.5, fat = 30.0,
+            ),
+        )
+        val result = writer(storage).write(withNutrition)
+        assertEquals("gemuese-curry", result.id)
+        assertTrue(storage.files[result.fileName]!!.contains("## Nährwerte"))
     }
 
     @Test

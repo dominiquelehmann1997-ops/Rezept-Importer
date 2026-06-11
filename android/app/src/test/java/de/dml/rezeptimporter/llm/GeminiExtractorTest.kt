@@ -45,7 +45,8 @@ class GeminiExtractorTest {
         assertTrue(req.path!!.contains("gemini-2.5-flash:generateContent"))
         val body = req.body.readUtf8()
         assertTrue(body.contains("\"responseMimeType\":\"application/json\""))
-        assertTrue(body.contains("\"maxOutputTokens\":1500"))
+        assertTrue(body.contains("\"maxOutputTokens\":4096"))
+        assertTrue(body.contains("\"thinkingBudget\":0"))
     }
 
     @Test
