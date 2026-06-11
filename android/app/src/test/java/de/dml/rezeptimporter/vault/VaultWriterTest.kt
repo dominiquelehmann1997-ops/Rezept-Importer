@@ -72,4 +72,17 @@ class VaultWriterTest {
         val storage = FakeVaultStorage()
         writer(storage).write(draft.copy(name = "!!!"))
     }
+
+    @Test
+    fun sameNameTwiceProducesDistinctFilesAndIds() {
+        val storage = FakeVaultStorage()
+        val w = writer(storage)
+        val first = w.write(draft)
+        val second = w.write(draft)
+        assertEquals("gemuese-curry", first.id)
+        assertEquals("gemuese-curry-2", second.id)
+        assertEquals("Gemüse-Curry.md", first.fileName)
+        assertEquals("Gemüse-Curry-2.md", second.fileName)
+        assertEquals(2, storage.files.size)   // nichts überschrieben
+    }
 }

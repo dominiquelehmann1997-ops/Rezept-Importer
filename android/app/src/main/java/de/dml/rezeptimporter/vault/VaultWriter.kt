@@ -18,7 +18,8 @@ class VaultWriter(
      */
     fun write(draft: RecipeDraft): WriteResult {
         val base = Slug.fromName(draft.name)
-        val existing = storage.listMarkdownFiles().mapNotNull { it.id }.toSet()
+        val files = storage.listMarkdownFiles()
+        val existing = files.mapNotNull { it.id }.toSet()
         var id = base
         var n = 2
         while (id in existing) { id = "$base-$n"; n++ }
@@ -29,11 +30,15 @@ class VaultWriter(
             "Validierung fehlgeschlagen, Datei NICHT geschrieben: ${problems.joinToString("; ")}"
         }
 
-        val fileName = draft.name
+        val stem = draft.name
             .replace(Regex("[\\\\/:*?\"<>|]"), "-")
             .trim()
             .removePrefix("_")
-            .ifEmpty { id } + ".md"
+            .ifEmpty { id }
+        val existingNames = files.map { it.fileName }.toSet()
+        var fileName = "$stem.md"
+        var m = 2
+        while (fileName in existingNames) { fileName = "$stem-$m.md"; m++ }
         storage.write(fileName, content)
         return WriteResult(id, fileName)
     }
