@@ -42,7 +42,7 @@ class RecipeMarkdownWriter {
         return "---\n$yaml---\n\n$body"
     }
 
-    /** "400" → 400, "1.5" → 1.5, "1/2"/"2-3"/"etwas" → String (SnakeYAML quotet bei Bedarf). */
+    /** "400" → 400, "1.5" → 1.5; "1/2", "2-3", "1,5" (deutsches Komma) und Freitext bleiben String (SnakeYAML quotet bei Bedarf). */
     private fun coerceAmount(amount: String): Any {
         amount.toIntOrNull()?.let { return it }
         amount.toDoubleOrNull()?.let { return it }

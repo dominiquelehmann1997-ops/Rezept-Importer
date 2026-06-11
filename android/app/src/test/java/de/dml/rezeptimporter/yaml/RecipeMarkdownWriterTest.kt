@@ -38,6 +38,7 @@ class RecipeMarkdownWriterTest {
         assertEquals("favorit", fm["rating"])
         assertEquals(true, fm["reheatable"])
         assertEquals(4, fm["servings"])
+        assertEquals(listOf("vegetarisch"), fm["tags"])
 
         @Suppress("UNCHECKED_CAST")
         val ings = fm["ingredients"] as List<Map<String, Any?>>
@@ -64,6 +65,22 @@ class RecipeMarkdownWriterTest {
         @Suppress("UNCHECKED_CAST")
         val ings = fm["ingredients"] as List<Map<String, Any?>>
         assertEquals("Öl, kaltgepresst", ings[0]["name"])
+    }
+
+    @Test
+    fun amountEdgeCasesStayStringsOrNormalize() {
+        val draft = RecipeDraft(
+            name = "X",
+            ingredients = listOf(
+                IngredientDraft("Sahne", "1,5", "Becher"),   // deutsches Komma ⇒ bleibt String
+                IngredientDraft("Zucker", "2-3", "EL"),      // Bereich ⇒ bleibt String
+            ),
+        )
+        val fm = frontmatterOf(writer.render("x", draft))
+        @Suppress("UNCHECKED_CAST")
+        val ings = fm["ingredients"] as List<Map<String, Any?>>
+        assertEquals("1,5", ings[0]["amount"])
+        assertEquals("2-3", ings[1]["amount"])
     }
 
     @Test
