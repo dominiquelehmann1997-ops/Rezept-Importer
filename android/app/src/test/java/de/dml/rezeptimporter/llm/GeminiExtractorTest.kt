@@ -58,4 +58,20 @@ class GeminiExtractorTest {
             assertTrue(e.message!!.contains("429"))
         }
     }
+
+    @Test
+    fun wrapsTruncatedJsonInLlmException() = runTest {
+        // abgeschnittenes JSON in parts[0].text (MAX_TOKENS-Fall)
+        server.enqueue(
+            MockResponse().setBody(
+                """{"candidates":[{"content":{"parts":[{"text":"{\"name\":\"Cur"}]}}]}"""
+            )
+        )
+        try {
+            extractor.extract("text")
+            throw AssertionError("expected LlmException")
+        } catch (e: LlmException) {
+            // ok — kein roher SerializationException-Durchschlag
+        }
+    }
 }

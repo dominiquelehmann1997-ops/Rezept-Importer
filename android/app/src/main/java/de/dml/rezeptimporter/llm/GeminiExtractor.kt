@@ -52,42 +52,52 @@ class GeminiExtractor(
 
     override suspend fun extract(rawText: String, repairHint: String?): RecipeDraft =
         withContext(Dispatchers.IO) {
-            val body = buildJsonObject {
-                putJsonArray("contents") {
-                    addJsonObject {
-                        putJsonArray("parts") {
-                            addJsonObject {
-                                put("text", ExtractionPrompt.INSTRUCTION + "\n\n" +
-                                    ExtractionPrompt.userMessage(rawText, repairHint))
-                            }
+            try {
+                doExtract(rawText, repairHint)
+            } catch (e: LlmException) {
+                throw e
+            } catch (e: Exception) {
+                throw LlmException("Gemini-Aufruf fehlgeschlagen: ${e.message}", e)
+            }
+        }
+
+    private fun doExtract(rawText: String, repairHint: String?): RecipeDraft {
+        val body = buildJsonObject {
+            putJsonArray("contents") {
+                addJsonObject {
+                    putJsonArray("parts") {
+                        addJsonObject {
+                            put("text", ExtractionPrompt.INSTRUCTION + "\n\n" +
+                                ExtractionPrompt.userMessage(rawText, repairHint))
                         }
                     }
                 }
-                putJsonObject("generationConfig") {
-                    put("responseMimeType", "application/json")
-                    put("responseSchema", responseSchema)
-                    put("maxOutputTokens", ExtractionPrompt.MAX_OUTPUT_TOKENS)
-                }
             }
-
-            val request = Request.Builder()
-                .url("$baseUrl/v1beta/models/$model:generateContent")
-                .header("x-goog-api-key", apiKey)
-                .post(body.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-
-            client.newCall(request).execute().use { resp ->
-                val text = resp.body?.string() ?: ""
-                if (!resp.isSuccessful) {
-                    throw LlmException("Gemini HTTP ${resp.code}: ${text.take(300)}")
-                }
-                val root = Json.parseToJsonElement(text).jsonObject
-                val payload = root["candidates"]?.jsonArray?.firstOrNull()
-                    ?.jsonObject?.get("content")?.jsonObject
-                    ?.get("parts")?.jsonArray?.firstOrNull()
-                    ?.jsonObject?.get("text")?.jsonPrimitive?.content
-                    ?: throw LlmException("Gemini-Antwort ohne candidates/parts/text")
-                RecipeJsonMapper.fromJson(Json.parseToJsonElement(payload).jsonObject)
+            putJsonObject("generationConfig") {
+                put("responseMimeType", "application/json")
+                put("responseSchema", responseSchema)
+                put("maxOutputTokens", ExtractionPrompt.MAX_OUTPUT_TOKENS)
             }
         }
+
+        val request = Request.Builder()
+            .url("$baseUrl/v1beta/models/$model:generateContent")
+            .header("x-goog-api-key", apiKey)
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+
+        return client.newCall(request).execute().use { resp ->
+            val text = resp.body?.string() ?: ""
+            if (!resp.isSuccessful) {
+                throw LlmException("Gemini HTTP ${resp.code}: ${text.take(300)}")
+            }
+            val root = Json.parseToJsonElement(text).jsonObject
+            val payload = root["candidates"]?.jsonArray?.firstOrNull()
+                ?.jsonObject?.get("content")?.jsonObject
+                ?.get("parts")?.jsonArray?.firstOrNull()
+                ?.jsonObject?.get("text")?.jsonPrimitive?.content
+                ?: throw LlmException("Gemini-Antwort ohne candidates/parts/text")
+            RecipeJsonMapper.fromJson(Json.parseToJsonElement(payload).jsonObject)
+        }
+    }
 }
