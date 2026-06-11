@@ -56,6 +56,7 @@ class GeminiExtractorTest {
             throw AssertionError("expected LlmException")
         } catch (e: LlmException) {
             assertTrue(e.message!!.contains("429"))
+            assertTrue("HTTP-Fehler muss LlmTransportException sein", e is LlmTransportException)
         }
     }
 

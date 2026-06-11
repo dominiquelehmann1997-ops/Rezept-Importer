@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
 
 class HaikuExtractor(
     private val apiKey: String,
@@ -22,6 +23,8 @@ class HaikuExtractor(
                 doExtract(rawText, repairHint)
             } catch (e: LlmException) {
                 throw e
+            } catch (e: IOException) {
+                throw LlmTransportException("Anthropic nicht erreichbar: ${e.message}", e)
             } catch (e: Exception) {
                 throw LlmException("Anthropic-Aufruf fehlgeschlagen: ${e.message}", e)
             }
@@ -58,7 +61,7 @@ class HaikuExtractor(
         client.newCall(request).execute().use { resp ->
             val text = resp.body?.string() ?: ""
             if (!resp.isSuccessful) {
-                throw LlmException("Anthropic HTTP ${resp.code}: ${text.take(300)}")
+                throw LlmTransportException("Anthropic HTTP ${resp.code}: ${text.take(300)}")
             }
             val content = Json.parseToJsonElement(text).jsonObject["content"]?.jsonArray
                 ?: throw LlmException("Anthropic-Antwort ohne content[]")

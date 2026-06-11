@@ -14,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import de.dml.rezeptimporter.domain.RecipeDraft
+import de.dml.rezeptimporter.llm.FallbackExtractor
 import de.dml.rezeptimporter.llm.GeminiExtractor
 import de.dml.rezeptimporter.llm.HaikuExtractor
+import de.dml.rezeptimporter.llm.LlmExtractor
 import de.dml.rezeptimporter.ocr.OcrTextExtractor
 import de.dml.rezeptimporter.pipeline.ImportPipeline
 import de.dml.rezeptimporter.pipeline.isBareUrl
@@ -86,15 +88,16 @@ class ShareActivity : ComponentActivity() {
         runImport()
     }
 
-    private fun buildExtractor() = when (settings.provider) {
-        Provider.GEMINI -> {
-            check(settings.geminiKey.isNotBlank()) { "Kein Gemini-API-Key — in der App unter Settings eintragen" }
-            GeminiExtractor(settings.geminiKey, httpClient)
+    /** Gewählter Provider zuerst; bei Technik-Fehlern (HTTP/Netz) springt der andere ein, falls sein Key da ist. */
+    private fun buildExtractor(): LlmExtractor {
+        val gemini = settings.geminiKey.takeIf { it.isNotBlank() }?.let { GeminiExtractor(it, httpClient) }
+        val haiku = settings.anthropicKey.takeIf { it.isNotBlank() }?.let { HaikuExtractor(it, httpClient) }
+        val (primary, secondary) = when (settings.provider) {
+            Provider.GEMINI -> gemini to haiku
+            Provider.HAIKU -> haiku to gemini
         }
-        Provider.HAIKU -> {
-            check(settings.anthropicKey.isNotBlank()) { "Kein Anthropic-API-Key — in der App unter Settings eintragen" }
-            HaikuExtractor(settings.anthropicKey, httpClient)
-        }
+        checkNotNull(primary) { "Kein API-Key für den gewählten Provider — in der App unter Settings eintragen" }
+        return if (secondary != null) FallbackExtractor(primary, secondary) else primary
     }
 
     private fun runImport() {

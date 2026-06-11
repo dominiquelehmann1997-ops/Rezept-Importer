@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
 
 class GeminiExtractor(
     private val apiKey: String,
@@ -56,6 +57,8 @@ class GeminiExtractor(
                 doExtract(rawText, repairHint)
             } catch (e: LlmException) {
                 throw e
+            } catch (e: IOException) {
+                throw LlmTransportException("Gemini nicht erreichbar: ${e.message}", e)
             } catch (e: Exception) {
                 throw LlmException("Gemini-Aufruf fehlgeschlagen: ${e.message}", e)
             }
@@ -89,7 +92,7 @@ class GeminiExtractor(
         return client.newCall(request).execute().use { resp ->
             val text = resp.body?.string() ?: ""
             if (!resp.isSuccessful) {
-                throw LlmException("Gemini HTTP ${resp.code}: ${text.take(300)}")
+                throw LlmTransportException("Gemini HTTP ${resp.code}: ${text.take(300)}")
             }
             val root = Json.parseToJsonElement(text).jsonObject
             val payload = root["candidates"]?.jsonArray?.firstOrNull()
