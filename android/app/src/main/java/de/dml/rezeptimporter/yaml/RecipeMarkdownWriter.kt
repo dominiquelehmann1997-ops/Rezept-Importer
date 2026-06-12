@@ -45,9 +45,11 @@ class RecipeMarkdownWriter {
         val body = buildString {
             if (draft.ingredients.isNotEmpty()) {
                 appendLine("## Zutaten")
-                // Basis-Portionen sichtbar im Text — die Kochansicht skaliert gegen Frontmatter-servings,
-                // aber der Nutzer muss den Ausgangswert auch ohne aktive View sehen.
-                draft.servings?.let { appendLine("*Für $it ${if (it == 1) "Portion" else "Portionen"}*") }
+                // Basis-Portionen sichtbar im Text; data-qty-parse lässt Recipe-View die Zahl
+                // beim Skalieren mitziehen (Span ist im normalen Reading-Mode unsichtbar).
+                draft.servings?.let {
+                    appendLine("*Für <span data-qty-parse>$it ${if (it == 1) "Portion" else "Portionen"}</span>*")
+                }
                 draft.ingredients.forEach { appendLine("- ${ingredientLine(it)}") }
                 appendLine()
             }
@@ -69,9 +71,23 @@ class RecipeMarkdownWriter {
         return "---\n$yaml---\n\n$body"
     }
 
-    /** "200 g Grillkäse", "1/2 l Brühe", "Salz" — null-Teile entfallen. */
-    private fun ingredientLine(ing: de.dml.rezeptimporter.domain.IngredientDraft): String =
-        listOfNotNull(ing.amount, ing.unit, ing.name).joinToString(" ")
+    /**
+     * "200 g Grillkäse", "1/2 l Brühe", "Salz" — null-Teile entfallen.
+     * Recipe-View-Kompatibilität: Dezimal-Kommas → Punkt (nur so skalierbar); Bereiche wie
+     * "2-3" in data-qty-no-parse gekapselt, sonst fehlparst die View sie als Dash-Mixed-Number.
+     */
+    private fun ingredientLine(ing: de.dml.rezeptimporter.domain.IngredientDraft): String {
+        val amount = ing.amount?.let { it.replace(Regex("(?<=\\d),(?=\\d)"), ".") }
+        if (amount != null && isRange(amount)) {
+            val qty = listOfNotNull(amount, ing.unit).joinToString(" ")
+            return "<span data-qty-no-parse>$qty</span> ${ing.name}"
+        }
+        return listOfNotNull(amount, ing.unit, ing.name).joinToString(" ")
+    }
+
+    /** "2-3", "0.5-1" = Bereich. "1-1/2" NICHT — das ist gültiges Dash-Mixed-Number der Recipe-View. */
+    private fun isRange(amount: String): Boolean =
+        Regex("^\\d+(\\.\\d+)?\\s*[-–]\\s*\\d+(\\.\\d+)?$").matches(amount)
 
     /** 28.0 → "28", 28.5 → "28.5". */
     private fun num(d: Double): String =
