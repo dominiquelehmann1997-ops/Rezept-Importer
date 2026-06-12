@@ -44,8 +44,11 @@ private val DungeonScheme = darkColorScheme(
 )
 
 @Composable
-fun ArcaneTheme(content: @Composable () -> Unit) {
-    val scheme = if (isSystemInDarkTheme()) DungeonScheme else ParchmentScheme
+fun ArcaneTheme(
+    darkOverride: Boolean? = null,
+    content: @Composable () -> Unit,
+) {
+    val scheme = if (darkOverride ?: isSystemInDarkTheme()) DungeonScheme else ParchmentScheme
     MaterialTheme(
         colorScheme = scheme,
         typography = ArcaneTypography,

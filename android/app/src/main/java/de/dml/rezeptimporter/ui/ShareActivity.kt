@@ -85,7 +85,7 @@ class ShareActivity : ComponentActivity() {
         )
 
         setContent {
-            ArcaneTheme {
+            ArcaneTheme(darkOverride = settings.darkMode) {
                 Box(
                     Modifier
                         .fillMaxSize()

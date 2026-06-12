@@ -46,6 +46,13 @@ class AppSettings(context: Context) {
         get() = prefs.getString("anthropic_key", "")!!
         set(v) = prefs.edit().putString("anthropic_key", v).apply()
 
+    /** null = System folgen; sonst expliziter Dark-Mode-Schalter aus den Einstellungen. */
+    var darkMode: Boolean?
+        get() = if (prefs.contains("dark_mode")) prefs.getBoolean("dark_mode", false) else null
+        set(v) = prefs.edit().apply {
+            if (v == null) remove("dark_mode") else putBoolean("dark_mode", v)
+        }.apply()
+
     private companion object {
         const val PREFS_NAME = "rezept_importer_secure"
     }

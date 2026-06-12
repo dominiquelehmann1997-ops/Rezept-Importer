@@ -126,7 +126,9 @@ class MainActivity : ComponentActivity() {
         vaultUriState.value = settings.vaultUri?.toString() ?: ""
 
         setContent {
-            ArcaneTheme {
+            var darkMode by remember { mutableStateOf(settings.darkMode) }
+            ArcaneTheme(darkOverride = darkMode) {
+                val dark = darkMode ?: isSystemInDarkTheme()
                 var screen by remember { mutableStateOf(Screen.HOME) }
                 var provider by remember { mutableStateOf(settings.provider) }
                 var geminiKey by remember { mutableStateOf(settings.geminiKey) }
@@ -150,6 +152,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Header(
                         screen = screen,
+                        dark = dark,
                         onToggle = {
                             screen = if (screen == Screen.HOME) Screen.SETTINGS else Screen.HOME
                         },
@@ -201,6 +204,8 @@ class MainActivity : ComponentActivity() {
                             onGeminiKey = { geminiKey = it; settings.geminiKey = it },
                             anthropicKey = anthropicKey,
                             onAnthropicKey = { anthropicKey = it; settings.anthropicKey = it },
+                            dark = dark,
+                            onDarkMode = { darkMode = it; settings.darkMode = it },
                         )
                     }
                 }
@@ -210,7 +215,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Header(screen: Screen, onToggle: () -> Unit) {
+private fun Header(screen: Screen, dark: Boolean, onToggle: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Image(
             painterResource(R.drawable.obsididine_logo),
@@ -223,7 +228,7 @@ private fun Header(screen: Screen, onToggle: () -> Unit) {
                 Text("ObsidiDine", style = MaterialTheme.typography.headlineSmall)
                 BlinkingCursor()
             }
-            val mode = if (isSystemInDarkTheme()) "[DUNKEL]" else "[HELL]"
+            val mode = if (dark) "[DUNKEL]" else "[HELL]"
             ArcaneTag(
                 if (screen == Screen.HOME) "[REZEPT-IMPORTER] $mode" else "[EINSTELLUNGEN] $mode"
             )
@@ -360,7 +365,31 @@ private fun SettingsScreen(
     onGeminiKey: (String) -> Unit,
     anthropicKey: String,
     onAnthropicKey: (String) -> Unit,
+    dark: Boolean,
+    onDarkMode: (Boolean) -> Unit,
 ) {
+    ArcaneCard {
+        ArcaneCardTitle("Darstellung", tag = if (dark) "[DUNKEL]" else "[HELL]")
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Dark Mode",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = dark,
+                onCheckedChange = onDarkMode,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    uncheckedTrackColor = MaterialTheme.colorScheme.background,
+                    uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            )
+        }
+    }
+
     ArcaneCard {
         ArcaneCardTitle(
             "Vault-Ordner",
