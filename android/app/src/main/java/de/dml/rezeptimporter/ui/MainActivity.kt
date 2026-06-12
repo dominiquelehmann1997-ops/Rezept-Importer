@@ -3,6 +3,8 @@ package de.dml.rezeptimporter.ui
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -83,9 +85,25 @@ class MainActivity : ComponentActivity() {
 
     private val vaultUriState = mutableStateOf("")
 
+    /** Synchroner Startfehler: Stacktrace lesbar anzeigen statt stiller Crash. */
+    private fun showFatalError(e: Exception) {
+        setContentView(ScrollView(this).apply {
+            addView(TextView(context).apply {
+                text = "Start fehlgeschlagen:\n\n${e.stackTraceToString()}"
+                setTextIsSelectable(true)
+                setPadding(48, 96, 48, 96)
+            })
+        })
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        settings = AppSettings(this)
+        try {
+            settings = AppSettings(this)
+        } catch (e: Exception) {
+            showFatalError(e)
+            return
+        }
         vaultUriState.value = settings.vaultUri?.toString() ?: ""
 
         setContent {
@@ -115,6 +133,34 @@ class MainActivity : ComponentActivity() {
                             screen = if (screen == Screen.HOME) Screen.SETTINGS else Screen.HOME
                         },
                     )
+                    // Vom Crash-Handler (ObsidiDineApp) gespeicherter Stacktrace des
+                    // letzten Absturzes — Nutzer kann ihn screenshotten und teilen.
+                    if (screen == Screen.HOME) {
+                        val crashFile = File(filesDir, "last-crash.txt")
+                        var crashLog by remember {
+                            mutableStateOf(if (crashFile.exists()) crashFile.readText() else null)
+                        }
+                        crashLog?.let { log ->
+                            ArcaneCard {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "Letzter Absturz",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    ArcaneTag("[CRASH]")
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(log.take(3000), style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.height(16.dp))
+                                ArcaneSecondaryButton("Verwerfen", {
+                                    crashFile.delete()
+                                    crashLog = null
+                                })
+                            }
+                        }
+                    }
                     when (screen) {
                         Screen.HOME -> HomeScreen(
                             photoCount = photoUris.size,
