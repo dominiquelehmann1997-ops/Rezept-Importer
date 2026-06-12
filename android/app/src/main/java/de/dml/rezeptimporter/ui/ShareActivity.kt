@@ -6,14 +6,23 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import de.dml.rezeptimporter.R
 import de.dml.rezeptimporter.domain.RecipeDraft
 import de.dml.rezeptimporter.llm.FallbackExtractor
 import de.dml.rezeptimporter.llm.GeminiExtractor
@@ -42,12 +51,12 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 /** Rotierende Statuszeilen, damit der LLM-Call (10-30 s) nicht tot wirkt. */
-private val CastingFlavor = listOf(
-    "Runen werden entziffert …",
-    "Zutaten werden identifiziert …",
-    "Mengen werden ausgewogen …",
-    "Nährwerte werden gewogen …",
-    "Der Schreiber füllt die Schriftrolle …",
+private val ProgressLines = listOf(
+    "Text wird gelesen …",
+    "Zutaten werden erkannt …",
+    "Mengen werden zugeordnet …",
+    "Nährwerte werden übernommen …",
+    "Markdown wird erstellt …",
 )
 
 sealed interface ImportState {
@@ -86,28 +95,46 @@ class ShareActivity : ComponentActivity() {
                     when (val s = state.value) {
                         is ImportState.Working -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                             ArcaneCard(Modifier.padding(24.dp)) {
-                                var flavorIndex by remember { mutableIntStateOf(0) }
+                                var lineIndex by remember { mutableIntStateOf(0) }
                                 LaunchedEffect(Unit) {
                                     while (true) {
                                         delay(2200)
-                                        flavorIndex = (flavorIndex + 1) % CastingFlavor.size
+                                        lineIndex = (lineIndex + 1) % ProgressLines.size
                                     }
                                 }
+                                // App-Logo pulsiert sanft, solange das LLM arbeitet.
+                                val pulse = rememberInfiniteTransition(label = "pulse")
+                                val scale by pulse.animateFloat(
+                                    initialValue = 0.92f,
+                                    targetValue = 1.06f,
+                                    animationSpec = infiniteRepeatable(
+                                        tween(900), RepeatMode.Reverse,
+                                    ),
+                                    label = "pulseScale",
+                                )
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
-                                    CircularProgressIndicator(
+                                    Image(
+                                        painterResource(R.drawable.obsididine_logo),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(80.dp).scale(scale),
+                                    )
+                                    Spacer(Modifier.height(16.dp))
+                                    LinearProgressIndicator(
+                                        modifier = Modifier.fillMaxWidth(),
                                         color = MaterialTheme.colorScheme.primary,
+                                        trackColor = MaterialTheme.colorScheme.outline,
                                     )
                                     Spacer(Modifier.height(16.dp))
                                     Text(
-                                        "Zauber wird gewirkt",
+                                        "Rezept wird extrahiert",
                                         style = MaterialTheme.typography.titleMedium,
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Text(
-                                        CastingFlavor[flavorIndex],
+                                        ProgressLines[lineIndex],
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -123,13 +150,13 @@ class ShareActivity : ComponentActivity() {
                             ArcaneCard(Modifier.padding(24.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        "Quest fehlgeschlagen",
+                                        "Import fehlgeschlagen",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.tertiary,
                                         modifier = Modifier.weight(1f),
                                     )
                                     ArcaneTag(
-                                        "[RETRY?]",
+                                        "[FEHLER]",
                                         color = MaterialTheme.colorScheme.tertiary,
                                     )
                                 }

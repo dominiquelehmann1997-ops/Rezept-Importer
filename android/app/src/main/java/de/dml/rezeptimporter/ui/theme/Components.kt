@@ -27,8 +27,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldColors
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
@@ -111,6 +114,32 @@ fun ArcaneTag(
         style = MaterialTheme.typography.bodySmall.copy(fontFamily = SpaceMono),
         color = color,
     )
+}
+
+/** Einheitlicher Karten-Kopf: Mana-Raute, Titel, optionaler Mono-Tag rechts. */
+@Composable
+fun ArcaneCardTitle(
+    title: String,
+    tag: String? = null,
+    modifier: Modifier = Modifier,
+    titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    tagColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "◆",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = titleColor,
+            modifier = Modifier.weight(1f),
+        )
+        tag?.let { ArcaneTag(it, color = tagColor) }
+    }
 }
 
 /** Zelda-Style-Statbar: flache, harte Füllung im Rahmen — kein Verlauf, kein Blur. */

@@ -36,11 +36,11 @@ fun PreviewScreen(
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Beute begutachten",
+                    "Rezept-Vorschau",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
-                ArcaneTag("[LOOT]")
+                ArcaneTag("[VORSCHAU]")
             }
         }
 
@@ -98,7 +98,7 @@ fun PreviewScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    ArcaneTag("[INVENTAR: ${draft.ingredients.size}]")
+                    ArcaneTag("[${draft.ingredients.size}]")
                 }
                 Spacer(Modifier.height(8.dp))
                 draft.ingredients.forEachIndexed { i, ing ->
@@ -148,7 +148,7 @@ fun PreviewScreen(
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.weight(1f),
                         )
-                        ArcaneTag("[STATS" + (n.basis?.let { ": $it" } ?: "") + "]")
+                        n.basis?.let { ArcaneTag("[$it]") }
                     }
                     Spacer(Modifier.height(8.dp))
                     n.kcal?.let {
@@ -192,7 +192,7 @@ fun PreviewScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    ArcaneTag("[QUEST-LOG: ${draft.steps.size}]")
+                    ArcaneTag("[${draft.steps.size} SCHRITTE]")
                 }
                 Spacer(Modifier.height(8.dp))
                 draft.steps.forEachIndexed { i, step ->
