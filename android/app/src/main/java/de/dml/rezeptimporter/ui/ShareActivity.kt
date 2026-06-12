@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +25,9 @@ import de.dml.rezeptimporter.pipeline.ImportPipeline
 import de.dml.rezeptimporter.pipeline.isBareUrl
 import de.dml.rezeptimporter.settings.AppSettings
 import de.dml.rezeptimporter.settings.Provider
+import de.dml.rezeptimporter.ui.theme.ArcaneCard
+import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
+import de.dml.rezeptimporter.ui.theme.ArcaneTheme
 import de.dml.rezeptimporter.validate.RecipeValidator
 import de.dml.rezeptimporter.vault.SafVaultStorage
 import de.dml.rezeptimporter.vault.VaultWriter
@@ -61,26 +65,48 @@ class ShareActivity : ComponentActivity() {
         )
 
         setContent {
-            MaterialTheme {
-                when (val s = state.value) {
-                    is ImportState.Working -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Spacer(Modifier.height(8.dp))
-                            Text("Rezept wird extrahiert …")
+            ArcaneTheme {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .safeDrawingPadding(),
+                ) {
+                    when (val s = state.value) {
+                        is ImportState.Working -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                            ArcaneCard(Modifier.padding(24.dp)) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Spacer(Modifier.height(16.dp))
+                                    Text(
+                                        "Rezept wird extrahiert …",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
                         }
-                    }
-                    is ImportState.Preview -> PreviewScreen(
-                        initial = s.draft,
-                        onSave = ::save,
-                        onCancel = { clearPhotoCache(); finish() },
-                    )
-                    is ImportState.Error -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally,
-                               modifier = Modifier.padding(24.dp)) {
-                            Text(s.message)
-                            Spacer(Modifier.height(8.dp))
-                            Button(onClick = { finish() }) { Text("Schließen") }
+                        is ImportState.Preview -> PreviewScreen(
+                            initial = s.draft,
+                            onSave = ::save,
+                            onCancel = { clearPhotoCache(); finish() },
+                        )
+                        is ImportState.Error -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                            ArcaneCard(Modifier.padding(24.dp)) {
+                                Text(
+                                    "Import fehlgeschlagen",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(s.message, style = MaterialTheme.typography.bodyMedium)
+                                Spacer(Modifier.height(16.dp))
+                                ArcanePrimaryButton("Schließen", { finish() })
+                            }
                         }
                     }
                 }
