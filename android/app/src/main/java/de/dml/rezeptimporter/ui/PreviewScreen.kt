@@ -13,7 +13,9 @@ import de.dml.rezeptimporter.ui.theme.ArcaneCard
 import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
 import de.dml.rezeptimporter.ui.theme.ArcaneSecondaryButton
 import de.dml.rezeptimporter.ui.theme.ArcaneShape
+import de.dml.rezeptimporter.ui.theme.ArcaneStatBar
 import de.dml.rezeptimporter.ui.theme.ArcaneTag
+import de.dml.rezeptimporter.ui.theme.SpaceMono
 import de.dml.rezeptimporter.ui.theme.arcaneTextFieldColors
 
 @Composable
@@ -34,11 +36,11 @@ fun PreviewScreen(
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Rezept-Vorschau",
+                    "Beute begutachten",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
-                ArcaneTag("[PREVIEW]")
+                ArcaneTag("[LOOT]")
             }
         }
 
@@ -96,7 +98,7 @@ fun PreviewScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    ArcaneTag("[${draft.ingredients.size}]")
+                    ArcaneTag("[INVENTAR: ${draft.ingredients.size}]")
                 }
                 Spacer(Modifier.height(8.dp))
                 draft.ingredients.forEachIndexed { i, ing ->
@@ -146,16 +148,38 @@ fun PreviewScreen(
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.weight(1f),
                         )
-                        n.basis?.let { ArcaneTag("[$it]") }
+                        ArcaneTag("[STATS" + (n.basis?.let { ": $it" } ?: "") + "]")
                     }
                     Spacer(Modifier.height(8.dp))
-                    val parts = listOfNotNull(
-                        n.kcal?.let { "$it kcal" },
-                        n.protein?.let { "Eiweiß ${it.fmtG()}" },
-                        n.carbs?.let { "KH ${it.fmtG()}" },
-                        n.fat?.let { "Fett ${it.fmtG()}" },
+                    n.kcal?.let {
+                        Text("$it kcal", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    // Makros als flache Statbars, skaliert am größten Wert.
+                    val macros = listOfNotNull(
+                        n.protein?.let { "EIWEISS" to it },
+                        n.carbs?.let { "KH" to it },
+                        n.fat?.let { "FETT" to it },
                     )
-                    Text(parts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
+                    val maxMacro = macros.maxOfOrNull { it.second } ?: 0.0
+                    macros.forEach { (label, value) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodySmall
+                                    .copy(fontFamily = SpaceMono),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(72.dp),
+                            )
+                            ArcaneStatBar(
+                                (value / maxMacro).toFloat(),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(value.fmtG(), style = MaterialTheme.typography.bodySmall)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
                 }
             }
         }
@@ -168,7 +192,7 @@ fun PreviewScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    ArcaneTag("[${draft.steps.size} SCHRITTE]")
+                    ArcaneTag("[QUEST-LOG: ${draft.steps.size}]")
                 }
                 Spacer(Modifier.height(8.dp))
                 draft.steps.forEachIndexed { i, step ->

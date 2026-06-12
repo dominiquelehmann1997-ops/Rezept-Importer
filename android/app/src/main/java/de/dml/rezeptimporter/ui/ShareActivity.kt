@@ -27,17 +27,28 @@ import de.dml.rezeptimporter.settings.AppSettings
 import de.dml.rezeptimporter.settings.Provider
 import de.dml.rezeptimporter.ui.theme.ArcaneCard
 import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
+import de.dml.rezeptimporter.ui.theme.ArcaneTag
 import de.dml.rezeptimporter.ui.theme.ArcaneTheme
 import de.dml.rezeptimporter.validate.RecipeValidator
 import de.dml.rezeptimporter.vault.SafVaultStorage
 import de.dml.rezeptimporter.vault.VaultWriter
 import de.dml.rezeptimporter.yaml.RecipeMarkdownWriter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
+
+/** Rotierende Statuszeilen, damit der LLM-Call (10-30 s) nicht tot wirkt. */
+private val CastingFlavor = listOf(
+    "Runen werden entziffert …",
+    "Zutaten werden identifiziert …",
+    "Mengen werden ausgewogen …",
+    "Nährwerte werden gewogen …",
+    "Der Schreiber füllt die Schriftrolle …",
+)
 
 sealed interface ImportState {
     data object Working : ImportState
@@ -75,6 +86,13 @@ class ShareActivity : ComponentActivity() {
                     when (val s = state.value) {
                         is ImportState.Working -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                             ArcaneCard(Modifier.padding(24.dp)) {
+                                var flavorIndex by remember { mutableIntStateOf(0) }
+                                LaunchedEffect(Unit) {
+                                    while (true) {
+                                        delay(2200)
+                                        flavorIndex = (flavorIndex + 1) % CastingFlavor.size
+                                    }
+                                }
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier.fillMaxWidth(),
@@ -84,8 +102,14 @@ class ShareActivity : ComponentActivity() {
                                     )
                                     Spacer(Modifier.height(16.dp))
                                     Text(
-                                        "Rezept wird extrahiert …",
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        "Zauber wird gewirkt",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        CastingFlavor[flavorIndex],
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
@@ -97,11 +121,18 @@ class ShareActivity : ComponentActivity() {
                         )
                         is ImportState.Error -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                             ArcaneCard(Modifier.padding(24.dp)) {
-                                Text(
-                                    "Import fehlgeschlagen",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.tertiary,
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "Quest fehlgeschlagen",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    ArcaneTag(
+                                        "[RETRY?]",
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                    )
+                                }
                                 Spacer(Modifier.height(8.dp))
                                 Text(s.message, style = MaterialTheme.typography.bodyMedium)
                                 Spacer(Modifier.height(16.dp))

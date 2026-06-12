@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,12 +27,26 @@ import androidx.core.content.FileProvider
 import de.dml.rezeptimporter.settings.AppSettings
 import de.dml.rezeptimporter.settings.Provider
 import de.dml.rezeptimporter.ui.theme.ArcaneCard
+import de.dml.rezeptimporter.ui.theme.ArcaneChip
 import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
 import de.dml.rezeptimporter.ui.theme.ArcaneSecondaryButton
+import de.dml.rezeptimporter.ui.theme.ArcaneSlotRow
+import de.dml.rezeptimporter.ui.theme.ArcaneStatBar
 import de.dml.rezeptimporter.ui.theme.ArcaneTag
 import de.dml.rezeptimporter.ui.theme.ArcaneTheme
+import de.dml.rezeptimporter.ui.theme.BlinkingCursor
 import de.dml.rezeptimporter.ui.theme.arcaneTextFieldColors
 import java.io.File
+
+/** Zufälliger Spruch pro App-Start — kleine Belohnung fürs Aufmachen. */
+private val BardTips = listOf(
+    "Screenshots mit gut lesbarem Text bringen die beste OCR-Beute.",
+    "Cookidoo-Links liefern Zutaten und Nährwerte — die Schritte bewacht der Thermomix.",
+    "YouTube-Rezepte verstecken sich meist in der Videobeschreibung.",
+    "Mehrseitige Kochbuch-Rezepte? Einfach mehrere Fotos knipsen, dann erst importieren.",
+    "Jedes Rezept wird eine eigene Markdown-Schriftrolle in deinem Vault.",
+    "Instagram-Reel ohne Rezept in der Caption? Screenshot der Zutaten teilen.",
+)
 
 private enum class Screen { HOME, SETTINGS }
 
@@ -114,9 +129,11 @@ class MainActivity : ComponentActivity() {
                 var anthropicKey by remember { mutableStateOf(settings.anthropicKey) }
                 val vaultUri by vaultUriState
 
-                val configMissing = vaultUri.isEmpty() ||
-                    (provider == Provider.GEMINI && geminiKey.isBlank()) ||
-                    (provider == Provider.HAIKU && anthropicKey.isBlank())
+                val vaultOk = vaultUri.isNotEmpty()
+                val keyOk = when (provider) {
+                    Provider.GEMINI -> geminiKey.isNotBlank()
+                    Provider.HAIKU -> anthropicKey.isNotBlank()
+                }
 
                 Column(
                     Modifier
@@ -164,7 +181,8 @@ class MainActivity : ComponentActivity() {
                     when (screen) {
                         Screen.HOME -> HomeScreen(
                             photoCount = photoUris.size,
-                            configMissing = configMissing,
+                            vaultOk = vaultOk,
+                            keyOk = keyOk,
                             onCapture = ::capturePhoto,
                             onImport = ::startImportFromPhotos,
                             onDiscard = { photoUris.clear() },
@@ -191,8 +209,14 @@ class MainActivity : ComponentActivity() {
 private fun Header(screen: Screen, onToggle: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("ObsidiDine", style = MaterialTheme.typography.headlineSmall)
-            ArcaneTag(if (screen == Screen.HOME) "[REZEPT-IMPORTER]" else "[CONFIG]")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("ObsidiDine", style = MaterialTheme.typography.headlineSmall)
+                BlinkingCursor()
+            }
+            val mode = if (isSystemInDarkTheme()) "[DUNGEON]" else "[PERGAMENT]"
+            ArcaneTag(
+                if (screen == Screen.HOME) "[REZEPT-GRIMOIRE] $mode" else "[CONFIG] $mode"
+            )
         }
         IconButton(onClick = onToggle) {
             Icon(
@@ -205,31 +229,35 @@ private fun Header(screen: Screen, onToggle: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HomeScreen(
     photoCount: Int,
-    configMissing: Boolean,
+    vaultOk: Boolean,
+    keyOk: Boolean,
     onCapture: () -> Unit,
     onImport: () -> Unit,
     onDiscard: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    if (configMissing) {
+    // Ausrüstungs-Check: ohne Vault + Key keine Quest.
+    if (!vaultOk || !keyOk) {
+        val done = listOf(vaultOk, keyOk).count { it }
         ArcaneCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Setup unvollständig",
+                    "Ausrüstungs-Check",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.weight(1f),
                 )
-                ArcaneTag("[!]")
+                ArcaneTag("[$done/2]", color = MaterialTheme.colorScheme.tertiary)
             }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Vault-Ordner oder API-Key fehlt — ohne beides kein Import.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Spacer(Modifier.height(12.dp))
+            ArcaneStatBar(done / 2f, color = MaterialTheme.colorScheme.tertiary)
+            Spacer(Modifier.height(12.dp))
+            EquipmentRow("Vault-Ordner (Schatzkammer)", vaultOk)
+            EquipmentRow("API-Key (Mana-Quelle)", keyOk)
             Spacer(Modifier.height(16.dp))
             ArcaneSecondaryButton("Zu den Einstellungen", onOpenSettings)
         }
@@ -238,16 +266,21 @@ private fun HomeScreen(
     ArcaneCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Rezept fotografieren",
+                "Quest: Rezept erbeuten",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            ArcaneTag("[FOTOS: $photoCount]")
+            ArcaneTag("[LOOT: $photoCount]")
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
+        ArcaneSlotRow(filled = photoCount)
+        Spacer(Modifier.height(12.dp))
         Text(
-            if (photoCount == 0) "Fotos landen nur im App-Cache, nie in der Galerie."
-            else "$photoCount Foto(s) aufgenommen — weitere Seite knipsen oder Import starten.",
+            if (photoCount == 0)
+                "Fotografiere Kochbuch-Seite, Rezeptkarte oder Bildschirm. " +
+                    "Beute bleibt im App-Cache — nie in der Galerie."
+            else
+                "$photoCount Foto(s) im Beutel. Weitere Seite knipsen oder Quest abschließen.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(16.dp))
@@ -262,25 +295,63 @@ private fun HomeScreen(
         }
         if (photoCount > 0) {
             Spacer(Modifier.height(8.dp))
-            ArcaneSecondaryButton("Verwerfen", onDiscard)
+            ArcaneSecondaryButton("Beute verwerfen", onDiscard)
         }
     }
 
     ArcaneCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Teilen-Import",
+                "Portale",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            ArcaneTag("[SHARE]")
+            ArcaneTag("[TEILEN]")
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "Foto, Text oder Link (Web, YouTube, TikTok, Instagram) aus einer " +
-                "anderen App mit ObsidiDine teilen — das Rezept landet nach " +
-                "Vorschau im Vault.",
+            "Rezept aus einer anderen App mit ObsidiDine teilen — Link, Text " +
+                "oder Screenshot genügt. Offene Portale:",
             style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(12.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            listOf("WEB", "COOKIDOO", "YOUTUBE", "TIKTOK", "INSTAGRAM", "SCREENSHOT", "TEXT")
+                .forEach { ArcaneChip("[$it]") }
+        }
+    }
+
+    // Zufalls-Tipp pro App-Start, unaufdringlich unter den Karten.
+    val tip = remember { BardTips.random() }
+    Column {
+        ArcaneTag("[BARDEN-TIPP]")
+        Spacer(Modifier.height(4.dp))
+        Text(
+            tip,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Eine Zeile des Ausrüstungs-Checks: Status-Raute + Beschriftung. */
+@Composable
+private fun EquipmentRow(label: String, ok: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        ArcaneTag(
+            if (ok) "◆" else "◇",
+            color = if (ok) MaterialTheme.colorScheme.secondary
+            else MaterialTheme.colorScheme.tertiary,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        ArcaneTag(
+            if (ok) "[OK]" else "[FEHLT]",
+            color = if (ok) MaterialTheme.colorScheme.secondary
+            else MaterialTheme.colorScheme.tertiary,
         )
     }
 }
@@ -303,7 +374,12 @@ private fun SettingsScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            ArcaneTag(if (vaultUri.isEmpty()) "[LEER]" else "[OK]")
+            ArcaneTag("[SCHATZKAMMER] ")
+            ArcaneTag(
+                if (vaultUri.isEmpty()) "[LEER]" else "[OK]",
+                color = if (vaultUri.isEmpty()) MaterialTheme.colorScheme.tertiary
+                else MaterialTheme.colorScheme.secondary,
+            )
         }
         Spacer(Modifier.height(8.dp))
         Text(
@@ -316,7 +392,14 @@ private fun SettingsScreen(
     }
 
     ArcaneCard {
-        Text("LLM-Provider", style = MaterialTheme.typography.titleMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "LLM-Provider",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            ArcaneTag("[ZAUBERBUCH]")
+        }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(
@@ -348,7 +431,7 @@ private fun SettingsScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            ArcaneTag("[SECRET]")
+            ArcaneTag("[MANA-QUELLEN]")
         }
         Spacer(Modifier.height(8.dp))
         val transformation =
