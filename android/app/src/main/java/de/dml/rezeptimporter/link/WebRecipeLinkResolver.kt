@@ -18,11 +18,15 @@ class WebRecipeLinkResolver(
 
     override suspend fun resolve(url: String): String = withContext(Dispatchers.IO) {
         val html = fetch(url)
-        JsonLdRecipeParser.parse(html)
+        val text = JsonLdRecipeParser.parse(html)
             ?: throw LinkResolveException(
                 "Auf dieser Seite wurden keine maschinenlesbaren Rezeptdaten gefunden.\n" +
                 "Tipp: Screenshot der Zutaten/Schritte teilen."
             )
+        // Portale wie Cookidoo veröffentlichen Zutaten/Nährwerte, aber keine Schritte
+        // (abo-gated) — dann wenigstens die Quelle als Zubereitungsverweis mitgeben.
+        if ("Zubereitung:" in text) text
+        else "$text\n\nZubereitung:\n1. Zubereitung siehe Quelle: $url"
     }
 
     private fun fetch(url: String): String {

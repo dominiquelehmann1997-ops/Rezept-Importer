@@ -22,7 +22,7 @@ import de.dml.rezeptimporter.llm.LlmExtractor
 import de.dml.rezeptimporter.link.RecipeLinkResolver
 import de.dml.rezeptimporter.ocr.OcrTextExtractor
 import de.dml.rezeptimporter.pipeline.ImportPipeline
-import de.dml.rezeptimporter.pipeline.isBareUrl
+import de.dml.rezeptimporter.pipeline.extractShareUrl
 import de.dml.rezeptimporter.settings.AppSettings
 import de.dml.rezeptimporter.settings.Provider
 import de.dml.rezeptimporter.ui.theme.ArcaneCard
@@ -140,11 +140,13 @@ class ShareActivity : ComponentActivity() {
                     state.value = ImportState.Error("Kein Text gefunden (OCR leer?). Tipp: Screenshot mit gut lesbarem Text teilen.")
                     return@launch
                 }
-                // Reiner Link: erst zu Rezept-Text auflösen (Web-Portale via JSON-LD,
-                // TikTok/Instagram via Caption), dann durch dieselbe LLM-Pipeline. Schlägt das
-                // fehl, landet die LinkResolveException im äußeren catch als Fehlermeldung.
-                val rawText = if (isBareUrl(source)) {
-                    RecipeLinkResolver(httpClient).resolve(source)
+                // Link (auch mit Share-Boilerplate drumherum): erst zu Rezept-Text auflösen
+                // (Web-Portale via JSON-LD, TikTok/Instagram via Caption), dann durch dieselbe
+                // LLM-Pipeline. Schlägt das fehl, landet die LinkResolveException im äußeren
+                // catch als Fehlermeldung.
+                val shareUrl = extractShareUrl(source)
+                val rawText = if (shareUrl != null) {
+                    RecipeLinkResolver(httpClient).resolve(shareUrl)
                 } else {
                     source
                 }

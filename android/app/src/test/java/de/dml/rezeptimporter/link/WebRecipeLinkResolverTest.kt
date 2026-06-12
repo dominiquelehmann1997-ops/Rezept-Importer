@@ -36,6 +36,24 @@ class WebRecipeLinkResolverTest {
         assertTrue(text.contains("Reis"))
     }
 
+    @Test fun appendsSourceHintWhenRecipeHasNoSteps() = runTest {
+        // Cookidoo: Zutaten/Nährwerte öffentlich, Zubereitungsschritte abo-gated.
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                <html><head><script type="application/ld+json">
+                {"@type":"Recipe","name":"Apfeltarte","recipeIngredient":["75 g Butter"]}
+                </script></head></html>
+                """.trimIndent()
+            )
+        )
+
+        val url = server.url("/recipes/recipe/de-DE/r802484").toString()
+        val text = resolver.resolve(url)
+        assertTrue(text.contains("Zubereitung"))
+        assertTrue(text.contains(url))
+    }
+
     @Test(expected = LinkResolveException::class)
     fun throwsWhenPageHasNoRecipe() = runTest {
         server.enqueue(MockResponse().setBody("<html><body>nur ein Reel-Embed</body></html>"))

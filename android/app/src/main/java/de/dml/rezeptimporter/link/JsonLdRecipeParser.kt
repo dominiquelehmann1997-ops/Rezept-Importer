@@ -48,12 +48,16 @@ object JsonLdRecipeParser {
         str(recipe["name"])?.let { sb.appendLine(it).appendLine() }
         str(recipe["description"])?.let { sb.appendLine(it).appendLine() }
 
+        yieldText(recipe["recipeYield"])?.let { sb.appendLine("Portionen: $it").appendLine() }
+
         val ingredients = strings(recipe["recipeIngredient"])
         if (ingredients.isNotEmpty()) {
             sb.appendLine("Zutaten:")
             ingredients.forEach { sb.appendLine("- $it") }
             sb.appendLine()
         }
+
+        nutrition(recipe["nutrition"])?.let { sb.appendLine(it).appendLine() }
 
         val steps = instructions(recipe["recipeInstructions"])
         if (steps.isNotEmpty()) {
@@ -63,8 +67,41 @@ object JsonLdRecipeParser {
         return sb.toString().trim()
     }
 
+    /** recipeYield: String | Number | Array davon (erstes Element gewinnt). */
+    private fun yieldText(el: JsonElement?): String? = when (el) {
+        is JsonArray -> el.firstNotNullOfOrNull { yieldText(it) }
+        is JsonPrimitive -> el.contentOrNull?.trim()?.ifBlank { null }
+        else -> null
+    }
+
+    /** schema.org/NutritionInformation → "Nährwerte:"-Block, oder null wenn leer. */
+    private fun nutrition(el: JsonElement?): String? {
+        val n = el as? JsonObject ?: return null
+        val parts = listOfNotNull(
+            str(n["calories"])?.let { "Kalorien: $it" },
+            str(n["proteinContent"])?.let { "Eiweiß: $it" },
+            str(n["carbohydrateContent"])?.let { "Kohlenhydrate: $it" },
+            str(n["fatContent"])?.let { "Fett: $it" },
+        )
+        if (parts.isEmpty()) return null
+        return "Nährwerte:\n" + parts.joinToString("\n") { "- $it" }
+    }
+
     private fun str(el: JsonElement?): String? =
-        (el as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.ifBlank { null }
+        (el as? JsonPrimitive)?.takeIf { it.isString }?.content
+            ?.let(::decodeEntities)?.trim()?.ifBlank { null }
+
+    /** Häufige HTML-Entities in Portal-Markup (z. B. Cookidoo: "&frac12; TL"). */
+    private fun decodeEntities(s: String): String {
+        if ('&' !in s) return s
+        return s
+            .replace(Regex("&#(\\d+);")) { it.groupValues[1].toInt().toChar().toString() }
+            .replace(Regex("&#x([0-9a-fA-F]+);")) { it.groupValues[1].toInt(16).toChar().toString() }
+            .replace("&frac12;", "½").replace("&frac14;", "¼").replace("&frac34;", "¾")
+            .replace("&nbsp;", " ").replace("&quot;", "\"").replace("&apos;", "'")
+            .replace("&lt;", "<").replace("&gt;", ">")
+            .replace("&amp;", "&") // zuletzt, sonst würde "&amp;frac12;" doppelt dekodiert
+    }
 
     private fun strings(el: JsonElement?): List<String> = when (el) {
         is JsonArray -> el.mapNotNull { str(it) }

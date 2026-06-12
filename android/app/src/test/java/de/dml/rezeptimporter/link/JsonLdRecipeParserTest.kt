@@ -92,6 +92,40 @@ class JsonLdRecipeParserTest {
         assertTrue(JsonLdRecipeParser.parse(html)!!.contains("Brot"))
     }
 
+    @Test fun parsesNutritionAndYield() {
+        // Cookidoo-Form: Nährwerte + Portionen öffentlich, aber keine Schritte.
+        val html = """
+            <script type="application/ld+json">
+            {"@context":"http://schema.org/","@type":"Recipe","name":"Apfeltarte",
+             "recipeYield":"8 Stücke",
+             "recipeIngredient":["75 g Butter","170 g Mehl"],
+             "nutrition":{"@type":"NutritionInformation","calories":"239 kcal",
+               "carbohydrateContent":"33 g","fatContent":"10 g","proteinContent":"2 g"}}
+            </script>
+        """.trimIndent()
+
+        val text = JsonLdRecipeParser.parse(html)!!
+        assertTrue(text.contains("Portionen: 8 Stücke"))
+        assertTrue(text.contains("239 kcal"))
+        assertTrue(text.contains("Eiweiß: 2 g"))
+        assertTrue(text.contains("Kohlenhydrate: 33 g"))
+        assertTrue(text.contains("Fett: 10 g"))
+    }
+
+    @Test fun decodesHtmlEntitiesInIngredients() {
+        val html = """
+            <script type="application/ld+json">
+            {"@type":"Recipe","name":"Tarte",
+             "recipeIngredient":["&frac12; TL Vanillezucker","Salz &amp; Pfeffer"],
+             "recipeInstructions":"Backen."}
+            </script>
+        """.trimIndent()
+
+        val text = JsonLdRecipeParser.parse(html)!!
+        assertTrue(text.contains("½ TL Vanillezucker"))
+        assertTrue(text.contains("Salz & Pfeffer"))
+    }
+
     @Test fun returnsNullWhenNoRecipe() {
         val html = """
             <script type="application/ld+json">
