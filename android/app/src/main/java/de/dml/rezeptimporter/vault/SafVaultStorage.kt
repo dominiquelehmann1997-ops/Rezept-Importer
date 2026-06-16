@@ -4,11 +4,33 @@ import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 
-class SafVaultStorage(private val context: Context, private val treeUri: Uri) : VaultStorage {
+/**
+ * @param subfolder optionaler Zielordner relativ zum gewählten Vault (z.B. "Dashboard").
+ *   Fehlende Ordner werden angelegt. null/leer ⇒ direkt in den Vault-Wurzelordner.
+ */
+class SafVaultStorage(
+    private val context: Context,
+    private val treeUri: Uri,
+    private val subfolder: String? = null,
+) : VaultStorage {
 
-    private val dir: DocumentFile =
+    private val root: DocumentFile =
         DocumentFile.fromTreeUri(context, treeUri)
             ?: throw IllegalStateException("Vault-Ordner nicht erreichbar — in Settings neu wählen")
+
+    private val dir: DocumentFile = resolveDir(subfolder)
+
+    /** Pfad-Segmente (per "/" getrennt) unterhalb des Vaults auflösen, fehlende anlegen. */
+    private fun resolveDir(path: String?): DocumentFile {
+        if (path.isNullOrBlank()) return root
+        var current = root
+        for (segment in path.split('/').map { it.trim() }.filter { it.isNotEmpty() }) {
+            current = current.findFile(segment)?.takeIf { it.isDirectory }
+                ?: current.createDirectory(segment)
+                ?: throw IllegalStateException("Unterordner konnte nicht angelegt werden: $segment")
+        }
+        return current
+    }
 
     override fun listMarkdownFiles(): List<VaultFile> =
         dir.listFiles()

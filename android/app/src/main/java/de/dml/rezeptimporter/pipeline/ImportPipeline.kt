@@ -2,6 +2,8 @@ package de.dml.rezeptimporter.pipeline
 
 import de.dml.rezeptimporter.domain.RecipeDraft
 import de.dml.rezeptimporter.domain.Slug
+import de.dml.rezeptimporter.llm.LanguageHeuristic
+import de.dml.rezeptimporter.llm.VegetarianHeuristic
 import de.dml.rezeptimporter.llm.LlmException
 import de.dml.rezeptimporter.llm.LlmExtractor
 import de.dml.rezeptimporter.llm.LlmTransportException
@@ -30,10 +32,37 @@ class ImportPipeline(
     private val writer: RecipeMarkdownWriter,
 ) {
     /**
-     * Rohtext → validierter RecipeDraft. Harte Obergrenze: 2 LLM-Calls
-     * (1 Extraktion + 1 Repair-Retry mit Fehlerliste). Danach LlmException.
+     * Rohtext → validierter, deutscher RecipeDraft. Extraktion (max. 2 Calls:
+     * 1 Extraktion + 1 Repair-Retry). Anschließend Sprach-Check: ist das Ergebnis
+     * noch Englisch, folgt EIN zusätzlicher Übersetzungs-Pass.
      */
     suspend fun extractValidated(rawText: String): RecipeDraft {
+        val german = ensureGerman(rawText, extractCore(rawText))
+        // Vegetarisch-Status immer heuristisch aus den (deutschen) Zutaten ableiten;
+        // im Preview kann der Nutzer ihn überschreiben.
+        return german.copy(vegetarian = VegetarianHeuristic.isVegetarian(german))
+    }
+
+    /**
+     * Immer prüfen, ob der Draft (noch) Englisch ist; falls ja, ein gezielter
+     * Übersetzungs-Pass durch dieselbe LLM-Pipeline. Schlägt der fehl oder bleibt
+     * das Ergebnis englisch, wird der ursprüngliche (valide) Draft behalten.
+     */
+    private suspend fun ensureGerman(rawText: String, draft: RecipeDraft): RecipeDraft {
+        if (!LanguageHeuristic.isLikelyEnglish(draft)) return draft
+        return try {
+            val translated = extractor.extract(rawText, repairHint = TRANSLATE_HINT)
+            if (problemsOf(translated).isEmpty() && !LanguageHeuristic.isLikelyEnglish(translated)) {
+                translated
+            } else {
+                draft
+            }
+        } catch (e: LlmException) {
+            draft   // Übersetzung ist Best-Effort — technische/semantische Fehler nicht hochreichen
+        }
+    }
+
+    private suspend fun extractCore(rawText: String): RecipeDraft {
         val firstProblems: List<String>
         try {
             val first = extractor.extract(rawText)
@@ -54,6 +83,13 @@ class ImportPipeline(
         val secondProblems = problemsOf(second)
         if (secondProblems.isEmpty()) return second
         throw LlmException("Extraktion nach Repair-Retry weiterhin ungültig: ${secondProblems.joinToString("; ")}")
+    }
+
+    private companion object {
+        const val TRANSLATE_HINT =
+            "Das Rezept ist auf Englisch. Übersetze ALLES vollständig ins Deutsche " +
+                "(Name, Zutaten, Schritte, Tags) und rechne sämtliche Mengen in " +
+                "europäische metrische Einheiten um (g, kg, ml, l, °C, EL, TL)."
     }
 
     private fun problemsOf(draft: RecipeDraft): List<String> {

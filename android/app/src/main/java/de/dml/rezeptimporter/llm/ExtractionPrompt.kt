@@ -8,6 +8,18 @@ object ExtractionPrompt {
         Du extrahierst Kochrezepte aus rohem Text (OCR-Ergebnisse, Social-Media-Captions).
         Antworte ausschließlich im vorgegebenen JSON-Format. Sprache: Deutsch.
         Regeln:
+        - ÜBERSETZEN: Ist das Rezept nicht auf Deutsch (z.B. Englisch), übersetze ALLES
+          ins Deutsche — "name", Zutaten-Namen, "steps", "tags", "nutrition.basis".
+          Nichts in der Ausgabe darf in einer anderen Sprache bleiben.
+        - METRISCH UMRECHNEN: Wandle US-/imperiale Mengen in europäische metrische Einheiten um.
+          Runde auf küchentaugliche Werte. Umrechnungen:
+            • lb/lbs/pound → g (1 lb ≈ 454 g), oz/ounce (Gewicht) → g (1 oz ≈ 28 g)
+            • fl oz → ml (1 fl oz ≈ 30 ml), cup → ml bei Flüssigem (1 cup ≈ 240 ml)
+            • stick Butter → g (1 stick ≈ 113 g)
+            • tsp/teaspoon → TL, tbsp/Tbsp/tablespoon → EL
+            • °F → °C (auch in "steps"!): °C = (°F − 32) × 5/9, auf 5er gerundet (z.B. 400°F → 200°C)
+            • inch → cm (1 inch ≈ 2,5 cm)
+          "to taste" → weglassen (kein amount), "a little"/"a pinch" → unit "Prise" ohne amount.
         - "amount" immer als String: ganze Zahlen "400", Dezimal "1.5", Brüche "1/2", Bereiche "2-3".
         - "unit" separat: g, kg, ml, l, EL, TL, Stk, Prise, Bund.
         - "freshness" nur wenn eindeutig: "frisch" (Gemüse, Obst, Fleisch, Fisch, Milchprodukte, Kräuter),

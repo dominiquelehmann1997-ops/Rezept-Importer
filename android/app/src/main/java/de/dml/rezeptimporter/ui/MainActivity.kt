@@ -10,12 +10,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +36,7 @@ import de.dml.rezeptimporter.ui.theme.ArcaneCardTitle
 import de.dml.rezeptimporter.ui.theme.ArcaneChip
 import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
 import de.dml.rezeptimporter.ui.theme.ArcaneSecondaryButton
+import de.dml.rezeptimporter.ui.theme.ArcaneShape
 import de.dml.rezeptimporter.ui.theme.ArcaneSlotRow
 import de.dml.rezeptimporter.ui.theme.ArcaneStatBar
 import de.dml.rezeptimporter.ui.theme.ArcaneTag
@@ -133,6 +136,8 @@ class MainActivity : ComponentActivity() {
                 var provider by remember { mutableStateOf(settings.provider) }
                 var geminiKey by remember { mutableStateOf(settings.geminiKey) }
                 var anthropicKey by remember { mutableStateOf(settings.anthropicKey) }
+                var saveFolder by remember { mutableStateOf(settings.saveFolder) }
+                var saveFolders by remember { mutableStateOf(settings.saveFolders) }
                 val vaultUri by vaultUriState
 
                 val vaultOk = vaultUri.isNotEmpty()
@@ -157,7 +162,7 @@ class MainActivity : ComponentActivity() {
                             screen = if (screen == Screen.HOME) Screen.SETTINGS else Screen.HOME
                         },
                     )
-                    // Vom Crash-Handler (ObsidiDineApp) gespeicherter Stacktrace des
+                    // Vom Crash-Handler (ObsiDineApp) gespeicherter Stacktrace des
                     // letzten Absturzes — Nutzer kann ihn screenshotten und teilen.
                     if (screen == Screen.HOME) {
                         val crashFile = File(filesDir, "last-crash.txt")
@@ -198,6 +203,21 @@ class MainActivity : ComponentActivity() {
                         Screen.SETTINGS -> SettingsScreen(
                             vaultUri = vaultUri,
                             onPickFolder = { pickFolder.launch(null) },
+                            saveFolder = saveFolder,
+                            saveFolders = saveFolders,
+                            onSelectFolder = { saveFolder = it; settings.saveFolder = it },
+                            onAddFolder = { name ->
+                                settings.saveFolders = saveFolders + name
+                                saveFolders = settings.saveFolders
+                            },
+                            onRemoveFolder = { name ->
+                                settings.saveFolders = saveFolders.filter { it != name }
+                                saveFolders = settings.saveFolders
+                                if (saveFolder == name) {
+                                    settings.saveFolder = "Dashboard"
+                                    saveFolder = settings.saveFolder
+                                }
+                            },
                             provider = provider,
                             onProvider = { provider = it; settings.provider = it },
                             geminiKey = geminiKey,
@@ -225,7 +245,7 @@ private fun Header(screen: Screen, dark: Boolean, onToggle: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("ObsidiDine", style = MaterialTheme.typography.headlineSmall)
+                Text("ObsiDine", style = MaterialTheme.typography.headlineSmall)
                 BlinkingCursor()
             }
             val mode = if (dark) "[DUNKEL]" else "[HELL]"
@@ -309,7 +329,7 @@ private fun HomeScreen(
         ArcaneCardTitle("Teilen-Import", tag = "[QUELLEN]")
         Spacer(Modifier.height(8.dp))
         Text(
-            "Rezept aus einer anderen App mit ObsidiDine teilen — Link, Text " +
+            "Rezept aus einer anderen App mit ObsiDine teilen — Link, Text " +
                 "oder Screenshot genügt. Unterstützte Quellen:",
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -355,10 +375,16 @@ private fun EquipmentRow(label: String, ok: Boolean) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsScreen(
     vaultUri: String,
     onPickFolder: () -> Unit,
+    saveFolder: String,
+    saveFolders: List<String>,
+    onSelectFolder: (String) -> Unit,
+    onAddFolder: (String) -> Unit,
+    onRemoveFolder: (String) -> Unit,
     provider: Provider,
     onProvider: (Provider) -> Unit,
     geminiKey: String,
@@ -405,6 +431,65 @@ private fun SettingsScreen(
         )
         Spacer(Modifier.height(16.dp))
         ArcaneSecondaryButton("Ordner wählen", onPickFolder)
+    }
+
+    ArcaneCard {
+        ArcaneCardTitle("Speicherordner", tag = "[/$saveFolder]")
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Standard-Zielordner für neue Rezepte. /Dashboard liest das Dashboard aus. " +
+                "Beim Import lässt sich der Ordner pro Rezept umstellen.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            saveFolders.forEach { f ->
+                FilterChip(
+                    selected = saveFolder == f,
+                    onClick = { onSelectFolder(f) },
+                    label = { Text(f) },
+                    shape = ArcaneShape,
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                    trailingIcon = if (f != "Dashboard") {
+                        {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Ordner entfernen",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickable { onRemoveFolder(f) },
+                            )
+                        }
+                    } else null,
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        var newFolder by remember { mutableStateOf("") }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newFolder,
+                onValueChange = { newFolder = it },
+                label = { Text("Neuer Ordner") },
+                singleLine = true,
+                colors = arcaneTextFieldColors(),
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            ArcaneSecondaryButton("+ Ordner", {
+                if (newFolder.isNotBlank()) {
+                    onAddFolder(newFolder.trim())
+                    newFolder = ""
+                }
+            })
+        }
     }
 
     ArcaneCard {

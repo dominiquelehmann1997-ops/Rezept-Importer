@@ -1,0 +1,23 @@
+Du konvertierst alle bestehenden Rezepte in meinem Obsidian-Vault ins
+Dashboard-Format. Die vollständige Auftrags- und Formatspezifikation steht in
+KONVERTIERUNG.md (im Projekt) — lies sie ZUERST komplett und folge ihr exakt.
+
+Vault-Rezeptordner: <HIER PFAD EINTRAGEN, z.B. G:\Meine Ablage\Obsidian\Rezepte>
+
+Ablauf:
+1. Lies KONVERTIERUNG.md.
+2. Lege ein Backup des Rezeptordners an (Ordner "_backup-vor-konvertierung" oder git),
+   BEVOR du etwas änderst. Zeig mir, dass das Backup steht.
+3. Liste alle Rezept-.md im Ordner auf (führende "_" überspringen) und nenn mir die Zahl.
+4. Konvertiere jede Datei in-place ins Zielformat aus KONVERTIERUNG.md §2–§6:
+   - name (Pflicht), immer ein stabiles eindeutiges id (kebab-case, vorhandenes id behalten),
+     rating/simple/reheatable/tags/ingredients[] nur wenn klar — sonst weglassen (Defaults).
+   - freshness nur bei eindeutiger Ware; im Zweifel weglassen.
+   - Bestehende Zubereitung als Markdown-Body unter "## Zubereitung" erhalten.
+   - Daten ERHALTEN, nichts erfinden/halluzinieren.
+5. Prüfe jede emittierte Datei gegen die Akzeptanz-Checkliste (§7) und gültiges YAML (§5).
+6. Schreib am Ende KONVERTIERUNG-REPORT.md: konvertiert/übersprungen/fehlerhaft,
+   pro Rezept vergebener Slug + geratene Felder + Dubletten, nicht-konvertierbare Dateien.
+
+Wichtig: nichts löschen. Bei Unsicherheit Feld weglassen statt falsch raten.
+Frag nach, falls der Vault-Pfad oder das Alt-Format unklar ist.

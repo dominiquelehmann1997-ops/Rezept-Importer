@@ -46,6 +46,28 @@ class AppSettings(context: Context) {
         get() = prefs.getString("anthropic_key", "")!!
         set(v) = prefs.edit().putString("anthropic_key", v).apply()
 
+    /** Standard-Zielordner (relativ zum Vault), in den neue Rezepte geschrieben werden.
+     *  Das Dashboard liest /Dashboard, daher ist das der Default. */
+    var saveFolder: String
+        get() = prefs.getString("save_folder", DEFAULT_FOLDER)!!.ifBlank { DEFAULT_FOLDER }
+        set(v) = prefs.edit().putString("save_folder", v.trim().ifBlank { DEFAULT_FOLDER }).apply()
+
+    /** Auswählbare Zielordner. Reihenfolge bleibt erhalten (newline-getrennt gespeichert).
+     *  "Dashboard" ist immer dabei und wird als erster geführt. */
+    var saveFolders: List<String>
+        get() = prefs.getString("save_folders", null)
+            ?.split("\n")?.map { it.trim() }?.filter { it.isNotEmpty() }
+            ?.let { withDashboardFirst(it) }
+            ?: DEFAULT_FOLDERS
+        set(v) = prefs.edit()
+            .putString("save_folders", withDashboardFirst(v).joinToString("\n"))
+            .apply()
+
+    private fun withDashboardFirst(folders: List<String>): List<String> {
+        val cleaned = folders.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        return (listOf(DEFAULT_FOLDER) + cleaned.filter { it != DEFAULT_FOLDER })
+    }
+
     /** null = System folgen; sonst expliziter Dark-Mode-Schalter aus den Einstellungen. */
     var darkMode: Boolean?
         get() = if (prefs.contains("dark_mode")) prefs.getBoolean("dark_mode", false) else null
@@ -55,5 +77,7 @@ class AppSettings(context: Context) {
 
     private companion object {
         const val PREFS_NAME = "rezept_importer_secure"
+        const val DEFAULT_FOLDER = "Dashboard"
+        val DEFAULT_FOLDERS = listOf("Dashboard", "Süßspeisen", "Snacks")
     }
 }

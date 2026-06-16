@@ -13,6 +13,7 @@ class RecipeMarkdownWriter {
         fm["rating"] = draft.rating
         fm["simple"] = draft.simple
         fm["reheatable"] = draft.reheatable
+        fm["vegetarian"] = draft.vegetarian
         if (draft.tags.isNotEmpty()) fm["tags"] = draft.tags
         draft.servings?.let { fm["servings"] = it }
         draft.prepMinutes?.let { fm["prepMinutes"] = it }

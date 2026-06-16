@@ -42,4 +42,6 @@ data class RecipeDraft(
     val rating: String = "ok",
     val simple: Boolean = true,
     val reheatable: Boolean = false,
+    /** Heuristisch aus den Zutaten gesetzt (kein Fleisch/Fisch ⇒ true), im Preview togglebar. */
+    val vegetarian: Boolean = true,
 )

@@ -143,6 +143,8 @@ class ShareActivity : ComponentActivity() {
                         }
                         is ImportState.Preview -> PreviewScreen(
                             initial = s.draft,
+                            folders = settings.saveFolders,
+                            defaultFolder = settings.saveFolder,
                             onSave = ::save,
                             onCancel = { clearPhotoCache(); finish() },
                         )
@@ -238,16 +240,16 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
-    private fun save(draft: RecipeDraft) {
+    private fun save(draft: RecipeDraft, folder: String) {
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    val storage = SafVaultStorage(this@ShareActivity, settings.vaultUri!!)
+                    val storage = SafVaultStorage(this@ShareActivity, settings.vaultUri!!, folder)
                     VaultWriter(storage, markdownWriter, validator).write(draft)
                 }
                 Toast.makeText(
                     this@ShareActivity,
-                    "Gespeichert: ${result.fileName} (id: ${result.id})",
+                    "Gespeichert: /$folder/${result.fileName} (id: ${result.id})",
                     Toast.LENGTH_LONG,
                 ).show()
                 clearPhotoCache()

@@ -3,7 +3,7 @@ package de.dml.rezeptimporter
 import android.app.Application
 import java.io.File
 
-class ObsidiDineApp : Application() {
+class ObsiDineApp : Application() {
     override fun onCreate() {
         super.onCreate()
         // Ohne adb-Zugriff ist Logcat unerreichbar — Stacktrace des letzten

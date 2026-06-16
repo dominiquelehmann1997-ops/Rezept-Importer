@@ -55,6 +55,14 @@ class RecipeMarkdownWriterTest {
     }
 
     @Test
+    fun writesVegetarianFlag() {
+        val veg = writer.render("x", RecipeDraft(name = "X", vegetarian = true))
+        assertEquals(true, frontmatterOf(veg)["vegetarian"])
+        val meat = writer.render("x", RecipeDraft(name = "X", vegetarian = false))
+        assertEquals(false, frontmatterOf(meat)["vegetarian"])
+    }
+
+    @Test
     fun quotesSpecialCharacters() {
         val draft = RecipeDraft(
             name = "Öl: kaltgepresst & gut",
