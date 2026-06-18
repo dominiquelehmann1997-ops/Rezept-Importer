@@ -54,6 +54,7 @@ import java.util.concurrent.TimeUnit
 
 /** Rotierende Statuszeilen, damit der LLM-Call (10-30 s) nicht tot wirkt. */
 private const val KEY_DRAFT = "recipe_draft"
+private const val KEY_DRAFT_PREFS = "draft_json"
 
 private val ProgressLines = listOf(
     "Text wird gelesen …",
@@ -76,6 +77,16 @@ class ShareActivity : ComponentActivity() {
     private lateinit var settings: AppSettings
     private lateinit var validator: RecipeValidator
     private val markdownWriter = RecipeMarkdownWriter()
+    private val draftPrefs by lazy { getSharedPreferences("import_draft", MODE_PRIVATE) }
+
+    private fun persistDraft(draft: RecipeDraft?) = draftPrefs.edit().apply {
+        if (draft == null) remove(KEY_DRAFT_PREFS)
+        else putString(KEY_DRAFT_PREFS, Json.encodeToString(RecipeDraft.serializer(), draft))
+    }.apply()
+
+    private fun loadPersistedDraft(): RecipeDraft? =
+        draftPrefs.getString(KEY_DRAFT_PREFS, null)
+            ?.let { runCatching { Json.decodeFromString(RecipeDraft.serializer(), it) }.getOrNull() }
 
     // LLM-Calls können >10s dauern — OkHttp-Default-Timeouts reichen nicht.
     private val httpClient = OkHttpClient.Builder()
@@ -91,6 +102,7 @@ class ShareActivity : ComponentActivity() {
 
         val restoredDraft = savedInstanceState?.getString(KEY_DRAFT)
             ?.let { runCatching { Json.decodeFromString(RecipeDraft.serializer(), it) }.getOrNull() }
+            ?: loadPersistedDraft()
         if (restoredDraft != null) state.value = ImportState.Preview(restoredDraft)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -251,7 +263,9 @@ class ShareActivity : ComponentActivity() {
                     source
                 }
                 val pipeline = ImportPipeline(buildExtractor(), validator, markdownWriter)
-                state.value = ImportState.Preview(pipeline.extractValidated(rawText))
+                val draft = pipeline.extractValidated(rawText)
+                persistDraft(draft)
+                state.value = ImportState.Preview(draft)
             } catch (e: Exception) {
                 state.value = ImportState.Error(e.message ?: "Unbekannter Fehler")
             }
@@ -302,6 +316,7 @@ class ShareActivity : ComponentActivity() {
 
     /** In-App aufgenommene Fotos (cache/fotos/) nach dem Import aufräumen. */
     private fun clearPhotoCache() {
+        persistDraft(null)
         File(cacheDir, "fotos").listFiles()?.forEach { it.delete() }
     }
 }
