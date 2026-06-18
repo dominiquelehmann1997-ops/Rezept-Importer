@@ -57,6 +57,9 @@ private val StartTips = listOf(
 
 private enum class Screen { HOME, SETTINGS }
 
+private const val KEY_PHOTO_URIS = "photo_uris"
+private const val KEY_PENDING_URI = "pending_photo_uri"
+
 class MainActivity : ComponentActivity() {
 
     private lateinit var settings: AppSettings
@@ -70,6 +73,12 @@ class MainActivity : ComponentActivity() {
             if (ok && uri != null) photoUris.add(uri)
             pendingPhotoUri = null
         }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putStringArrayList(KEY_PHOTO_URIS, ArrayList(photoUris.map { it.toString() }))
+        pendingPhotoUri?.let { outState.putString(KEY_PENDING_URI, it.toString()) }
+    }
 
     private fun newPhotoUri(): Uri {
         val dir = File(cacheDir, "fotos").apply { mkdirs() }
@@ -127,6 +136,11 @@ class MainActivity : ComponentActivity() {
             return
         }
         vaultUriState.value = settings.vaultUri?.toString() ?: ""
+
+        savedInstanceState?.getStringArrayList(KEY_PHOTO_URIS)
+            ?.forEach { photoUris.add(Uri.parse(it)) }
+        savedInstanceState?.getString(KEY_PENDING_URI)
+            ?.let { pendingPhotoUri = Uri.parse(it) }
 
         setContent {
             var darkMode by remember { mutableStateOf(settings.darkMode) }

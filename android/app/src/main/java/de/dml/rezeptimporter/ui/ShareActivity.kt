@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -46,11 +47,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
 
 /** Rotierende Statuszeilen, damit der LLM-Call (10-30 s) nicht tot wirkt. */
+private const val KEY_DRAFT = "recipe_draft"
+
 private val ProgressLines = listOf(
     "Text wird gelesen …",
     "Zutaten werden erkannt …",
@@ -68,6 +72,7 @@ sealed interface ImportState {
 class ShareActivity : ComponentActivity() {
 
     private val state = mutableStateOf<ImportState>(ImportState.Working)
+    private val showDiscardDialog = mutableStateOf(false)
     private lateinit var settings: AppSettings
     private lateinit var validator: RecipeValidator
     private val markdownWriter = RecipeMarkdownWriter()
@@ -83,6 +88,17 @@ class ShareActivity : ComponentActivity() {
         validator = RecipeValidator(
             assets.open("recipe-vault-frontmatter.schema.json").readBytes().toString(Charsets.UTF_8)
         )
+
+        val restoredDraft = savedInstanceState?.getString(KEY_DRAFT)
+            ?.let { runCatching { Json.decodeFromString(RecipeDraft.serializer(), it) }.getOrNull() }
+        if (restoredDraft != null) state.value = ImportState.Preview(restoredDraft)
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (state.value is ImportState.Preview) showDiscardDialog.value = true
+                else finish()
+            }
+        })
 
         setContent {
             ArcaneTheme(darkOverride = settings.darkMode) {
@@ -169,11 +185,35 @@ class ShareActivity : ComponentActivity() {
                             }
                         }
                     }
+                    if (showDiscardDialog.value) {
+                        AlertDialog(
+                            onDismissRequest = { showDiscardDialog.value = false },
+                            title = { Text("Rezept verwerfen?") },
+                            text = { Text("Das extrahierte Rezept wird nicht gespeichert.") },
+                            confirmButton = {
+                                TextButton(onClick = { clearPhotoCache(); finish() }) {
+                                    Text("Verwerfen")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showDiscardDialog.value = false }) {
+                                    Text("Zurück")
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
 
-        runImport()
+        if (restoredDraft == null) runImport()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        (state.value as? ImportState.Preview)?.let {
+            outState.putString(KEY_DRAFT, Json.encodeToString(RecipeDraft.serializer(), it.draft))
+        }
     }
 
     /** Gewählter Provider zuerst; bei Technik-Fehlern (HTTP/Netz) springt der andere ein, falls sein Key da ist. */
