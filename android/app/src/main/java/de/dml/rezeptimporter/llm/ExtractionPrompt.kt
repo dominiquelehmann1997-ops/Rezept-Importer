@@ -28,10 +28,14 @@ object ExtractionPrompt {
           "3P", "4P" oder "2 Personen / 4 Personen"), verwende ausschließlich die Mengen der
           kleinsten angegebenen Portion (z.B. 2P) und setze "servings" auf diese Zahl.
           Nimm niemals Mengen aus verschiedenen Portionsspalten.
-        - "steps": Nummerierte Zubereitungsschritte in aufsteigender Reihenfolge der Schrittnummer
-          (1, 2, 3 …) sortieren — unabhängig davon, in welcher Reihenfolge der OCR-Text sie liefert.
-          Nur den Beschreibungstext übernehmen, die Schrittnummer selbst nicht wiederholen.
-          Schritte als einzelne, vollständige Sätze.
+        - "steps": Bei mehrspaltig gescannten Rezeptkarten (z.B. HelloFresh 3×2-Raster) liefert
+          der OCR-Text die Schritte spaltenweise gruppiert: erst alle Schritte der linken Spalte
+          (z.B. Schritt 1 und 4), dann der mittleren (2 und 5), dann der rechten (3 und 6).
+          Erkenne jeden Schritt am Titel (kurze Imperativphrase, z.B. „Kartoffeln vorbereiten").
+          Der zugehörige Beschreibungstext folgt direkt darunter bis zum nächsten Titel.
+          Bringe die Schritte in die logisch richtige Kochreihenfolge; sind Schrittnummern im Text
+          vorhanden, nutze sie zur Sortierung. Schrittnummern nicht in den Ausgabetext übernehmen.
+          Jeden Schritt als vollständige Sätze ausgeben.
         - "nutrition" nur befüllen, wenn Nährwerte im Text explizit genannt sind: kcal (Energie),
           protein/carbs/fat in Gramm (nur Zahl, ohne Einheit). "basis" = Bezug wie im Text,
           z.B. "pro Portion" oder "pro 100g". Nährwerte niemals schätzen oder berechnen.
