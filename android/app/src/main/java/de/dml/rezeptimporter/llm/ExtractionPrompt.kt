@@ -24,7 +24,14 @@ object ExtractionPrompt {
         - "unit" separat: g, kg, ml, l, EL, TL, Stk, Prise, Bund.
         - "freshness" nur wenn eindeutig: "frisch" (Gemüse, Obst, Fleisch, Fisch, Milchprodukte, Kräuter),
           "haltbar" (Trockenvorrat, Konserven, Gewürze, Öl). Im Zweifel weglassen.
-        - "steps": die Zubereitungsschritte als einzelne, vollständige Sätze.
+        - PORTIONEN: Enthält der Text Zutatenmengen für mehrere Personenzahlen (z.B. Spalten "2P",
+          "3P", "4P" oder "2 Personen / 4 Personen"), verwende ausschließlich die Mengen der
+          kleinsten angegebenen Portion (z.B. 2P) und setze "servings" auf diese Zahl.
+          Nimm niemals Mengen aus verschiedenen Portionsspalten.
+        - "steps": Nummerierte Zubereitungsschritte in aufsteigender Reihenfolge der Schrittnummer
+          (1, 2, 3 …) sortieren — unabhängig davon, in welcher Reihenfolge der OCR-Text sie liefert.
+          Nur den Beschreibungstext übernehmen, die Schrittnummer selbst nicht wiederholen.
+          Schritte als einzelne, vollständige Sätze.
         - "nutrition" nur befüllen, wenn Nährwerte im Text explizit genannt sind: kcal (Energie),
           protein/carbs/fat in Gramm (nur Zahl, ohne Einheit). "basis" = Bezug wie im Text,
           z.B. "pro Portion" oder "pro 100g". Nährwerte niemals schätzen oder berechnen.
