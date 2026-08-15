@@ -1,0 +1,62 @@
+name: Debug-APK bauen
+
+# Baut die installierbare Debug-APK auf einem GitHub-Runner (dort ist das
+# Android-SDK vorhanden) und hängt sie an ein Prerelease — der Asset-Link lässt
+# sich direkt am Handy öffnen. Zusätzlich als Workflow-Artefakt (90 Tage).
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Debug-APK bauen
+        working-directory: android
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Unit-Tests
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      - name: APK umbenennen (Commit im Dateinamen)
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             "out/obsididine-debug-${GITHUB_SHA::7}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obsididine-debug-apk
+          path: out/*.apk
+          if-no-files-found: error
+
+      - name: Als Prerelease veröffentlichen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="apk-$(date -u +%Y%m%d-%H%M%S)"
+          gh release create "$tag" out/*.apk \
+            --title "ObsiDine Debug-APK ($(date -u +%Y-%m-%d))" \
+            --notes "Automatischer Debug-Build von \`${GITHUB_REF_NAME}\` (${GITHUB_SHA::7}).
+
+          Zum Installieren den APK-Link am Handy öffnen; Android fragt einmal nach
+          der Erlaubnis, Apps aus dieser Quelle zu installieren. Debug-Signatur —
+          eine später release-signierte Version lässt sich nicht darüber updaten." \
+            --prerelease \
+            --target "$GITHUB_SHA"
