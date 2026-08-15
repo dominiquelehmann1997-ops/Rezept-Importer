@@ -69,6 +69,37 @@ class RecipeJsonMapperTest {
     }
 
     @Test
+    fun parsesDescriptionAndIngredientSections() {
+        val json = Json.parseToJsonElement(
+            """
+            {
+              "name": "Nuggets",
+              "description": "  Knusprig aus dem Ofen.  ",
+              "ingredients": [
+                {"name": "Hähnchenbrust", "amount": "500", "unit": "g", "section": "Für die Nuggets"},
+                {"name": "Ketchup", "section": "Für die Soße:"},
+                {"name": "Salz", "section": "   "}
+              ],
+              "steps": []
+            }
+            """
+        ).jsonObject
+        val draft = RecipeJsonMapper.fromJson(json)
+        assertEquals("Knusprig aus dem Ofen.", draft.description)
+        assertEquals("Für die Nuggets", draft.ingredients[0].section)
+        assertEquals("Für die Soße", draft.ingredients[1].section)   // Doppelpunkt fliegt raus
+        assertEquals(null, draft.ingredients[2].section)             // leer ⇒ keine Gruppe
+    }
+
+    @Test
+    fun descriptionNullWhenAbsent() {
+        val draft = RecipeJsonMapper.fromJson(
+            Json.parseToJsonElement("""{"name":"X","ingredients":[],"steps":[]}""").jsonObject
+        )
+        assertEquals(null, draft.description)
+    }
+
+    @Test
     fun parsesNutritionWhenPresent() {
         val json = Json.parseToJsonElement(
             """{"name":"X","ingredients":[],"steps":[],

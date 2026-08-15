@@ -52,11 +52,14 @@ object RecipeJsonMapper {
                 unit = o["unit"].stringOrNull(),
                 freshness = o["freshness"].stringOrNull()
                     ?.takeIf { it in FRESHNESS },
+                section = o["section"].stringOrNull()
+                    ?.trim()?.trimEnd(':')?.trim()?.takeIf { it.isNotEmpty() },
             )
         }
 
         return RecipeDraft(
             name = name,
+            description = obj["description"].stringOrNull()?.trim()?.takeIf { it.isNotEmpty() },
             tags = obj["tags"]?.jsonArray.orEmpty()
                 .mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
             servings = obj["servings"].intOrNullSafe(),

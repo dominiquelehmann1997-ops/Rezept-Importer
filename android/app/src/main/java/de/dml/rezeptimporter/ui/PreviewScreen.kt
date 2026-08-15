@@ -3,11 +3,15 @@ package de.dml.rezeptimporter.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import de.dml.rezeptimporter.domain.IngredientDraft
 import de.dml.rezeptimporter.domain.RecipeDraft
 import de.dml.rezeptimporter.ui.theme.ArcaneCard
 import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
@@ -29,6 +33,8 @@ fun PreviewScreen(
 ) {
     var draft by remember { mutableStateOf(initial) }
     var folder by remember { mutableStateOf(defaultFolder) }
+    // Im Preview angelegte Kategorien, die noch keine Zutat enthalten (nur UI-Zustand).
+    var extraSections by remember { mutableStateOf(emptyList<String>()) }
 
     LazyColumn(
         Modifier
@@ -107,6 +113,32 @@ fun PreviewScreen(
             ArcaneCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
+                        "Beschreibung",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ArcaneTag(if (draft.description.isNullOrBlank()) "[LEER]" else "[TEXT]")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = draft.description ?: "",
+                    onValueChange = { v ->
+                        // Writer trimmt und lässt reine Leerzeichen weg — hier nur roh durchreichen.
+                        draft = draft.copy(description = v.ifEmpty { null })
+                    },
+                    label = { Text("Beschreibung / Notiz") },
+                    placeholder = { Text("Eigener Text zum Rezept — frei änderbar") },
+                    minLines = 3,
+                    colors = arcaneTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
+        item {
+            ArcaneCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
                         "Zutaten",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
@@ -114,41 +146,48 @@ fun PreviewScreen(
                     ArcaneTag("[${draft.ingredients.size}]")
                 }
                 Spacer(Modifier.height(8.dp))
-                draft.ingredients.forEachIndexed { i, ing ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        OutlinedTextField(
-                            value = ing.amount ?: "",
-                            onValueChange = { v ->
-                                draft = draft.copy(ingredients = draft.ingredients.toMutableList()
-                                    .also { it[i] = ing.copy(amount = v.ifEmpty { null }) })
+
+                // Zutaten nach Gruppe ("Für die Soße") gebündelt, Reihenfolge des ersten
+                // Auftretens. `extraSections` sind im Preview neu angelegte, noch leere
+                // Gruppen — sie existieren erst im Draft, sobald eine Zutat drin liegt.
+                val sections = (draft.ingredients.map { it.section } + extraSections).distinct()
+                sections.forEach { section ->
+                    IngredientSectionHeader(
+                        section = section,
+                        onRename = { renamed ->
+                            draft = draft.copy(
+                                ingredients = draft.ingredients.map {
+                                    if (it.section == section) it.copy(section = renamed) else it
+                                },
+                            )
+                            extraSections = extraSections.map { if (it == section) renamed else it }
+                                .filterNotNull().distinct()
+                        },
+                    )
+                    draft.ingredients.forEachIndexed { i, ing ->
+                        if (ing.section != section) return@forEachIndexed
+                        IngredientRow(
+                            ing = ing,
+                            sections = sections,
+                            onChange = { updated ->
+                                draft = draft.copy(
+                                    ingredients = draft.ingredients.toMutableList()
+                                        .also { it[i] = updated },
+                                )
                             },
-                            label = { Text("Menge") },
-                            colors = arcaneTextFieldColors(),
-                            modifier = Modifier.width(90.dp),
                         )
-                        OutlinedTextField(
-                            value = ing.unit ?: "",
-                            onValueChange = { v ->
-                                draft = draft.copy(ingredients = draft.ingredients.toMutableList()
-                                    .also { it[i] = ing.copy(unit = v.ifEmpty { null }) })
-                            },
-                            label = { Text("Einh.") },
-                            colors = arcaneTextFieldColors(),
-                            modifier = Modifier.width(80.dp),
-                        )
-                        OutlinedTextField(
-                            value = ing.name,
-                            onValueChange = { v ->
-                                draft = draft.copy(ingredients = draft.ingredients.toMutableList()
-                                    .also { it[i] = ing.copy(name = v) })
-                            },
-                            label = { Text("Zutat") },
-                            colors = arcaneTextFieldColors(),
-                            modifier = Modifier.weight(1f),
-                        )
+                        Spacer(Modifier.height(4.dp))
                     }
-                    Spacer(Modifier.height(4.dp))
                 }
+
+                Spacer(Modifier.height(4.dp))
+                ArcaneSecondaryButton("+ Kategorie", {
+                    // Neue, zunächst leere Gruppe — Name eintragen, Zutaten per Menü hineinschieben.
+                    var name = "Neue Kategorie"
+                    var n = 2
+                    while (name in sections.filterNotNull()) { name = "Neue Kategorie $n"; n++ }
+                    extraSections = extraSections + name
+                })
             }
         }
 
@@ -257,6 +296,87 @@ fun PreviewScreen(
                     enabled = draft.name.isNotBlank(),
                 )
                 ArcaneSecondaryButton("Abbrechen", onCancel)
+            }
+        }
+    }
+}
+
+/**
+ * Kopfzeile einer Zutaten-Gruppe. Leerer Text = „ohne Kategorie"; wer hier etwas
+ * einträgt, verschiebt alle Zutaten der Gruppe unter diese Überschrift.
+ */
+@Composable
+private fun IngredientSectionHeader(section: String?, onRename: (String?) -> Unit) {
+    OutlinedTextField(
+        value = section ?: "",
+        // Kein trim() beim Tippen — sonst verschluckt das Feld Leerzeichen. Der Writer trimmt.
+        onValueChange = { onRename(it.ifEmpty { null }) },
+        label = { Text("Kategorie") },
+        placeholder = { Text("ohne Kategorie — z. B. Für die Soße") },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.titleSmall,
+        colors = arcaneTextFieldColors(),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(6.dp))
+}
+
+/** Eine Zutatenzeile: Menge / Einheit / Name, plus Kategorie-Menü sobald es Gruppen gibt. */
+@Composable
+private fun IngredientRow(
+    ing: IngredientDraft,
+    sections: List<String?>,
+    onChange: (IngredientDraft) -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedTextField(
+            value = ing.amount ?: "",
+            onValueChange = { onChange(ing.copy(amount = it.ifEmpty { null })) },
+            label = { Text("Menge") },
+            colors = arcaneTextFieldColors(),
+            modifier = Modifier.width(90.dp),
+        )
+        OutlinedTextField(
+            value = ing.unit ?: "",
+            onValueChange = { onChange(ing.copy(unit = it.ifEmpty { null })) },
+            label = { Text("Einh.") },
+            colors = arcaneTextFieldColors(),
+            modifier = Modifier.width(80.dp),
+        )
+        OutlinedTextField(
+            value = ing.name,
+            onValueChange = { onChange(ing.copy(name = it)) },
+            label = { Text("Zutat") },
+            colors = arcaneTextFieldColors(),
+            modifier = Modifier.weight(1f),
+        )
+        if (sections.size > 1) {
+            var menuOpen by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = "Kategorie wählen",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    sections.forEach { s ->
+                        DropdownMenuItem(
+                            text = { Text(s ?: "ohne Kategorie") },
+                            onClick = {
+                                onChange(ing.copy(section = s))
+                                menuOpen = false
+                            },
+                            trailingIcon = if (s == ing.section) {
+                                { Icon(Icons.Filled.Check, contentDescription = null) }
+                            } else null,
+                        )
+                    }
+                }
             }
         }
     }

@@ -14,6 +14,19 @@ ingredients:
     expect(validateFrontmatter(md)).toEqual([]);
   });
 
+  it("accepts description and ingredient sections", () => {
+    const md = `---
+id: nuggets
+name: Nuggets
+description: Knusprig aus dem Ofen.
+ingredients:
+  - { name: Hähnchenbrust, amount: 500, unit: g, section: Für die Nuggets }
+  - { name: Ketchup, section: Für die Soße }
+---
+`;
+    expect(validateFrontmatter(md)).toEqual([]);
+  });
+
   it("rejects an invalid id pattern (no kebab-case)", () => {
     const md = `---\nid: "Gemüse Curry"\nname: X\n---\n`;
     expect(validateFrontmatter(md).length).toBeGreaterThan(0);

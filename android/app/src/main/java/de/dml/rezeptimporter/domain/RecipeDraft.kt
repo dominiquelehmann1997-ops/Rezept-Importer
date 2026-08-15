@@ -10,6 +10,12 @@ data class IngredientDraft(
     val unit: String? = null,
     /** "frisch" | "haltbar" | null */
     val freshness: String? = null,
+    /**
+     * Zutaten-Gruppe aus der Quelle, z.B. "Für die Nuggets" / "Für die Soße"
+     * (ohne Doppelpunkt). null = keine Gruppe. Der Writer setzt daraus im Body
+     * Zwischenüberschriften; der Dashboard-Ingest ignoriert das Feld.
+     */
+    val section: String? = null,
 )
 
 @Serializable
@@ -31,6 +37,11 @@ data class NutritionDraft(
 @Serializable
 data class RecipeDraft(
     val name: String,
+    /**
+     * Freitext-Beschreibung/Notiz zum Rezept. Aus der Quelle übernommen, im Preview
+     * frei editier- und ergänzbar. Landet im Frontmatter und als Absatz im Body.
+     */
+    val description: String? = null,
     val tags: List<String> = emptyList(),
     val servings: Int? = null,
     val prepMinutes: Int? = null,

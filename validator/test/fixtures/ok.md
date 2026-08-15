@@ -1,6 +1,7 @@
 ---
 id: gemuese-curry
 name: Gemüse-Curry mit Kokosmilch
+description: Cremiges Curry aus einem Topf — schmeckt aufgewärmt noch besser.
 rating: favorit
 simple: true
 reheatable: true
@@ -12,11 +13,24 @@ nutrition:
   kcal: 540
   protein: 18
 ingredients:
-  - { name: Kokosmilch, amount: 400, unit: ml, freshness: haltbar }
-  - { name: Süßkartoffel, amount: 2, unit: Stk, freshness: frisch }
-  - { name: Currypaste, amount: 2, unit: EL, freshness: haltbar }
-  - { name: Reis, amount: 250, unit: g, freshness: haltbar }
+  - { name: Kokosmilch, amount: 400, unit: ml, freshness: haltbar, section: Für das Curry }
+  - { name: Süßkartoffel, amount: 2, unit: Stk, freshness: frisch, section: Für das Curry }
+  - { name: Currypaste, amount: 2, unit: EL, freshness: haltbar, section: Für das Curry }
+  - { name: Reis, amount: 250, unit: g, freshness: haltbar, section: Zum Servieren }
 ---
+
+Cremiges Curry aus einem Topf — schmeckt aufgewärmt noch besser.
+
+## Zutaten
+*Für <span data-qty-parse>4 Portionen</span>*
+
+**Für das Curry**
+- 400 ml Kokosmilch
+- 2 Stk Süßkartoffel
+- 2 EL Currypaste
+
+**Zum Servieren**
+- 250 g Reis
 
 ## Zubereitung
 1. Süßkartoffel würfeln, anbraten.

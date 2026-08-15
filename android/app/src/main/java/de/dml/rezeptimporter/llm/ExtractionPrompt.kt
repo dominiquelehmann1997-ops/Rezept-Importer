@@ -9,7 +9,8 @@ object ExtractionPrompt {
         Antworte ausschließlich im vorgegebenen JSON-Format. Sprache: Deutsch.
         Regeln:
         - ÜBERSETZEN: Ist das Rezept nicht auf Deutsch (z.B. Englisch), übersetze ALLES
-          ins Deutsche — "name", Zutaten-Namen, "steps", "tags", "nutrition.basis".
+          ins Deutsche — "name", "description", Zutaten-Namen inkl. "section", "steps",
+          "tags", "nutrition.basis".
           Nichts in der Ausgabe darf in einer anderen Sprache bleiben.
         - METRISCH UMRECHNEN: Wandle US-/imperiale Mengen in europäische metrische Einheiten um.
           Runde auf küchentaugliche Werte. Umrechnungen:
@@ -20,8 +21,18 @@ object ExtractionPrompt {
             • °F → °C (auch in "steps"!): °C = (°F − 32) × 5/9, auf 5er gerundet (z.B. 400°F → 200°C)
             • inch → cm (1 inch ≈ 2,5 cm)
           "to taste" → weglassen (kein amount), "a little"/"a pinch" → unit "Prise" ohne amount.
+        - "description": kurze Beschreibung des Gerichts (1-3 Sätze), falls die Quelle eine
+          Einleitung/Beschreibung enthält (z.B. Vorspann über dem Rezept, Caption-Text).
+          Keine Zutaten- oder Schrittlisten hineinkopieren. Fehlt so ein Text, Feld weglassen —
+          niemals selbst ausdenken.
         - "amount" immer als String: ganze Zahlen "400", Dezimal "1.5", Brüche "1/2", Bereiche "2-3".
         - "unit" separat: g, kg, ml, l, EL, TL, Stk, Prise, Bund.
+        - ZUTATEN-GRUPPEN: Gliedert die Quelle die Zutaten unter Zwischenüberschriften
+          (z.B. "Für die Nuggets:", "Für die Soße:", "Teig", "Topping"), setze bei JEDER Zutat
+          dieser Gruppe "section" auf die Überschrift — ohne Doppelpunkt, Schreibweise der Quelle
+          beibehalten (z.B. "Für die Soße"). Zutaten über der ersten Überschrift bleiben ohne
+          "section". Reihenfolge der Zutaten nicht verändern. Gibt es keine Gruppen, "section"
+          überall weglassen — keine Gruppen erfinden.
         - "freshness" nur wenn eindeutig: "frisch" (Gemüse, Obst, Fleisch, Fisch, Milchprodukte, Kräuter),
           "haltbar" (Trockenvorrat, Konserven, Gewürze, Öl). Im Zweifel weglassen.
         - PORTIONEN: Enthält der Text Zutatenmengen für mehrere Personenzahlen (z.B. Spalten "2P",
@@ -48,6 +59,7 @@ object ExtractionPrompt {
       "type": "object",
       "properties": {
         "name": {"type": "string"},
+        "description": {"type": "string"},
         "tags": {"type": "array", "items": {"type": "string"}},
         "servings": {"type": "integer"},
         "prepMinutes": {"type": "integer"},
@@ -60,7 +72,8 @@ object ExtractionPrompt {
               "name": {"type": "string"},
               "amount": {"type": "string"},
               "unit": {"type": "string"},
-              "freshness": {"type": "string", "enum": ["frisch", "haltbar"]}
+              "freshness": {"type": "string", "enum": ["frisch", "haltbar"]},
+              "section": {"type": "string"}
             },
             "required": ["name"],
             "additionalProperties": false

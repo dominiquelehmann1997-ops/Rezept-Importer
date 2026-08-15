@@ -10,6 +10,7 @@ class RecipeMarkdownWriter {
         val fm = linkedMapOf<String, Any>()
         fm["id"] = id
         fm["name"] = draft.name
+        draft.description?.trim()?.takeIf { it.isNotEmpty() }?.let { fm["description"] = it }
         fm["rating"] = draft.rating
         fm["simple"] = draft.simple
         fm["reheatable"] = draft.reheatable
@@ -24,6 +25,7 @@ class RecipeMarkdownWriter {
                 ing.amount?.let { m["amount"] = coerceAmount(it) }
                 ing.unit?.let { m["unit"] = it }
                 ing.freshness?.let { m["freshness"] = it }
+                ing.section?.trim()?.takeIf { it.isNotEmpty() }?.let { m["section"] = it }
                 m
             }
         }
@@ -44,6 +46,11 @@ class RecipeMarkdownWriter {
         val yaml = Yaml(options).dump(fm)
 
         val body = buildString {
+            // Beschreibung als Einleitungsabsatz vor der ersten Überschrift.
+            draft.description?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                appendLine(it)
+                appendLine()
+            }
             if (draft.ingredients.isNotEmpty()) {
                 appendLine("## Zutaten")
                 // Basis-Portionen sichtbar im Text; data-qty-parse lässt Recipe-View die Zahl
@@ -51,7 +58,18 @@ class RecipeMarkdownWriter {
                 draft.servings?.let {
                     appendLine("*Für <span data-qty-parse>$it ${if (it == 1) "Portion" else "Portionen"}</span>*")
                 }
-                draft.ingredients.forEach { appendLine("- ${ingredientLine(it)}") }
+                // Gruppen ("Für die Soße") in Reihenfolge ihres ersten Auftretens.
+                // Bewusst als fette Zeile statt "###": Recipe-View schneidet den
+                // Zutaten-Abschnitt an der nächsten Überschrift ab — eine Zwischen-
+                // überschrift würde die Zutaten darunter aus der Kochansicht kippen.
+                val groups = draft.ingredients.groupBy { it.section?.trim()?.takeIf(String::isNotEmpty) }
+                groups.forEach { (section, items) ->
+                    if (section != null) {
+                        appendLine()
+                        appendLine("**$section**")
+                    }
+                    items.forEach { appendLine("- ${ingredientLine(it)}") }
+                }
                 appendLine()
             }
             draft.nutrition?.takeIf { !it.isEmpty }?.let { n ->

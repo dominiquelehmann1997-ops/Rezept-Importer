@@ -17,6 +17,10 @@
       "minLength": 1,
       "description": "Pflicht. Leer/fehlend ⇒ Datei verworfen."
     },
+    "description": {
+      "type": "string",
+      "description": "Freitext-Beschreibung/Notiz. Nur Obsidian; Ingest ignoriert."
+    },
     "rating": {
       "type": "string",
       "enum": ["favorit", "ok", "selten"],
@@ -46,6 +50,10 @@
             "type": ["string", "null"],
             "enum": ["frisch", "haltbar", null],
             "description": "Alles andere ⇒ null ⇒ Heuristik."
+          },
+          "section": {
+            "type": ["string", "null"],
+            "description": "Zutaten-Gruppe, z.B. 'Für die Soße'. Nur Obsidian; Ingest ignoriert."
           }
         }
       }

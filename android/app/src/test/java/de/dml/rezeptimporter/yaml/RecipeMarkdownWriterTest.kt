@@ -196,6 +196,92 @@ class RecipeMarkdownWriterTest {
     }
 
     @Test
+    fun rendersDescriptionInFrontmatterAndBody() {
+        val draft = RecipeDraft(
+            name = "X",
+            description = "Knusprige Nuggets mit scharfer Soße.",
+            ingredients = listOf(IngredientDraft("Ei")),
+        )
+        val md = writer.render("x", draft)
+        assertEquals("Knusprige Nuggets mit scharfer Soße.", frontmatterOf(md)["description"])
+        val body = md.substringAfter("\n---\n")
+        // Einleitungsabsatz steht vor der ersten Überschrift.
+        assertTrue(body.trimStart().startsWith("Knusprige Nuggets mit scharfer Soße."))
+        assertTrue(body.indexOf("Knusprige") < body.indexOf("## Zutaten"))
+    }
+
+    @Test
+    fun omitsDescriptionWhenBlank() {
+        val md = writer.render("x", RecipeDraft(name = "X", description = "   "))
+        assertTrue(!frontmatterOf(md).containsKey("description"))
+        val blank = writer.render("x", RecipeDraft(name = "X"))
+        assertTrue(!frontmatterOf(blank).containsKey("description"))
+    }
+
+    @Test
+    fun rendersIngredientSectionsAsGroupedBodyBlocks() {
+        val draft = RecipeDraft(
+            name = "Nuggets",
+            ingredients = listOf(
+                IngredientDraft("Hähnchenbrust", "500", "g", section = "Für die Nuggets"),
+                IngredientDraft("Paniermehl", "100", "g", section = "Für die Nuggets"),
+                IngredientDraft("Ketchup", "3", "EL", section = "Für die Soße"),
+            ),
+            steps = listOf("Panieren."),
+        )
+        val md = writer.render("nuggets", draft)
+        val body = md.substringAfter("\n---\n")
+
+        assertTrue(body.contains("**Für die Nuggets**"))
+        assertTrue(body.contains("**Für die Soße**"))
+        // Zutaten stehen unter ihrer Gruppe, Reihenfolge bleibt erhalten.
+        assertTrue(body.indexOf("**Für die Nuggets**") < body.indexOf("- 500 g Hähnchenbrust"))
+        assertTrue(body.indexOf("- 100 g Paniermehl") < body.indexOf("**Für die Soße**"))
+        assertTrue(body.indexOf("**Für die Soße**") < body.indexOf("- 3 EL Ketchup"))
+        // Keine Zwischenüberschrift ("###") — die würde Recipe-View den Abschnitt abschneiden.
+        assertTrue(!body.contains("### "))
+
+        @Suppress("UNCHECKED_CAST")
+        val ings = frontmatterOf(md)["ingredients"] as List<Map<String, Any?>>
+        assertEquals("Für die Nuggets", ings[0]["section"])
+        assertEquals("Für die Soße", ings[2]["section"])
+    }
+
+    @Test
+    fun groupsScatteredSectionMembersTogether() {
+        val draft = RecipeDraft(
+            name = "X",
+            ingredients = listOf(
+                IngredientDraft("Mehl", section = "Teig"),
+                IngredientDraft("Öl", section = "Soße"),
+                IngredientDraft("Hefe", section = "Teig"),
+            ),
+        )
+        val body = writer.render("x", draft).substringAfter("\n---\n")
+        assertTrue(body.indexOf("- Hefe") < body.indexOf("**Soße**"))
+        assertEquals(1, Regex("\\*\\*Teig\\*\\*").findAll(body).count())
+    }
+
+    @Test
+    fun ungroupedIngredientsStayWithoutHeading() {
+        val draft = RecipeDraft(
+            name = "X",
+            ingredients = listOf(
+                IngredientDraft("Salz"),
+                IngredientDraft("Ketchup", section = "Für die Soße"),
+            ),
+        )
+        val md = writer.render("x", draft)
+        val body = md.substringAfter("\n---\n")
+        // Ungruppierte Zutaten zuerst, ohne eigene Überschrift.
+        assertTrue(body.indexOf("- Salz") < body.indexOf("**Für die Soße**"))
+
+        @Suppress("UNCHECKED_CAST")
+        val ings = frontmatterOf(md)["ingredients"] as List<Map<String, Any?>>
+        assertTrue(!ings[0].containsKey("section"))
+    }
+
+    @Test
     fun rendersNutritionInFrontmatterAndBody() {
         val draft = RecipeDraft(
             name = "X",

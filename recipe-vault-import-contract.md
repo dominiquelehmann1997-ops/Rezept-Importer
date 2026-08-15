@@ -44,6 +44,7 @@ unsichtbar (siehe Abschnitt 4).
 | `amount` | string oder number | nein | `null` | Wird per `String()` zu Text gezwungen (`500` → `"500"`). |
 | `unit` | string oder number | nein | `null` | Wie `amount`. |
 | `freshness` | enum `frisch`\|`haltbar` | nein | `null` | **Explizite Haltbarkeits-Angabe** (schlägt Heuristik + gelernte Korrektur). Jeder andere Wert ⇒ `null` ⇒ App rät später per Keyword-Heuristik. |
+| `section` | string | nein | — | **Vom Ingest ignoriert** (nur Obsidian). Zutaten-Gruppe wie „Für die Soße", siehe Abschnitt 4. |
 
 ## 3. Der `slug` / `id` — das Wichtigste für den Importer
 
@@ -74,8 +75,12 @@ Das Template (`docs/recipe-vault-template.md`) zeigt zur Lesbarkeit zusätzliche
 Felder. **Der Ingest ignoriert sie vollständig** — sie leben nur für Menschen in
 Obsidian:
 
-- Frontmatter: `servings`, `prepMinutes`, `cookMinutes`, `nutrition` (kcal/protein/…)
-  → derzeit **kein** App-Effekt.
+- Frontmatter: `description`, `servings`, `prepMinutes`, `cookMinutes`,
+  `nutrition` (kcal/protein/…) → derzeit **kein** App-Effekt.
+- Pro Zutat: `section` — Zutaten-Gruppe der Quelle („Für die Nuggets", „Für die
+  Soße"). Der Importer bündelt die Zutaten im Body unter fetten Zwischenzeilen
+  (`**Für die Soße**`, bewusst keine `###`-Überschrift: die würde den
+  `## Zutaten`-Abschnitt der Kochansicht abschneiden).
 - **Der gesamte Markdown-Body** (`## Zubereitung`, Schritte, Fließtext, Bilder)
   → wird geparst aber verworfen. Die App speichert **keine** Kochanleitung.
 
@@ -135,6 +140,7 @@ keine Zutaten.)
 ---
 id: gemuese-curry
 name: Gemüse-Curry mit Kokosmilch
+description: Cremiges Curry aus einem Topf — schmeckt aufgewärmt noch besser.
 rating: favorit
 simple: true
 reheatable: true
@@ -146,11 +152,24 @@ nutrition:
   kcal: 540
   protein: 18
 ingredients:
-  - { name: Kokosmilch, amount: 400, unit: ml, freshness: haltbar }
-  - { name: Süßkartoffel, amount: 2, unit: Stk, freshness: frisch }
-  - { name: Currypaste, amount: 2, unit: EL, freshness: haltbar }
-  - { name: Reis, amount: 250, unit: g, freshness: haltbar }
+  - { name: Kokosmilch, amount: 400, unit: ml, freshness: haltbar, section: Für das Curry }
+  - { name: Süßkartoffel, amount: 2, unit: Stk, freshness: frisch, section: Für das Curry }
+  - { name: Currypaste, amount: 2, unit: EL, freshness: haltbar, section: Für das Curry }
+  - { name: Reis, amount: 250, unit: g, freshness: haltbar, section: Zum Servieren }
 ---
+
+Cremiges Curry aus einem Topf — schmeckt aufgewärmt noch besser.
+
+## Zutaten
+*Für <span data-qty-parse>4 Portionen</span>*
+
+**Für das Curry**
+- 400 ml Kokosmilch
+- 2 Stk Süßkartoffel
+- 2 EL Currypaste
+
+**Zum Servieren**
+- 250 g Reis
 
 ## Zubereitung
 1. Süßkartoffel würfeln, anbraten.
@@ -159,8 +178,8 @@ ingredients:
 ```
 
 Vom Ingest übernommen: name, id→slug, rating=favorit, simple, reheatable, tags
-(als JSON), 4 Zutaten mit amount/unit/freshness. Ignoriert: servings, prepMinutes,
-cookMinutes, nutrition, der ganze Zubereitungs-Body.
+(als JSON), 4 Zutaten mit amount/unit/freshness. Ignoriert: description, section,
+servings, prepMinutes, cookMinutes, nutrition, der ganze Body.
 
 ---
 

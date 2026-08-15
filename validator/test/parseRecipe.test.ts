@@ -51,6 +51,23 @@ describe("parseRecipeMarkdown", () => {
     ]);
   });
 
+  it("ignores description and ingredient sections (Obsidian-only fields)", () => {
+    const md = `---
+id: nuggets
+name: Nuggets
+description: Knusprig aus dem Ofen.
+ingredients:
+  - { name: Ketchup, amount: 3, unit: EL, section: Für die Soße }
+---
+`;
+    const { recipe, errors } = parseRecipeMarkdown(md);
+    expect(errors).toEqual([]);
+    expect(recipe!.ingredients).toEqual([
+      { name: "Ketchup", amount: "3", unit: "EL", category: null },
+    ]);
+    expect(recipe).not.toHaveProperty("description");
+  });
+
   it("rejects the whole file when name is missing", () => {
     const { recipe, errors } = parseRecipeMarkdown(`---\nid: x\n---\n`);
     expect(recipe).toBeNull();

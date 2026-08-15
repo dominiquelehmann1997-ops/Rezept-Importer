@@ -25,6 +25,21 @@ class RecipeValidatorTest {
     }
 
     @Test
+    fun acceptsDescriptionAndIngredientSection() {
+        val md = """
+            ---
+            id: nuggets
+            name: Nuggets
+            description: Knusprig aus dem Ofen.
+            ingredients:
+              - { name: Hähnchenbrust, amount: 500, unit: g, section: Für die Nuggets }
+              - { name: Ketchup, section: Für die Soße }
+            ---
+        """.trimIndent()
+        assertEquals(emptyList<String>(), validator.validateMarkdown(md))
+    }
+
+    @Test
     fun rejectsBadIdPattern() {
         val md = "---\nid: Hat Leerzeichen\nname: X\n---\n"
         assertTrue(validator.validateMarkdown(md).isNotEmpty())
