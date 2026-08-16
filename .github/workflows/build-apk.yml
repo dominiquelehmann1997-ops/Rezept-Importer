@@ -40,6 +40,12 @@ jobs:
           cp android/app/build/outputs/apk/debug/app-debug.apk \
              "out/obsididine-debug-${GITHUB_SHA::7}.apk"
 
+      - name: Signatur prüfen (fester Debug-Key aus dem Repo?)
+        run: |
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          "$apksigner" verify --print-certs out/*.apk \
+            | grep -iE 'certificate DN|SHA-256 digest' || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: obsididine-debug-apk
@@ -56,7 +62,10 @@ jobs:
             --notes "Automatischer Debug-Build von \`${GITHUB_REF_NAME}\` (${GITHUB_SHA::7}).
 
           Zum Installieren den APK-Link am Handy öffnen; Android fragt einmal nach
-          der Erlaubnis, Apps aus dieser Quelle zu installieren. Debug-Signatur —
-          eine später release-signierte Version lässt sich nicht darüber updaten." \
+          der Erlaubnis, Apps aus dieser Quelle zu installieren.
+
+          Signiert mit dem festen Debug-Key aus dem Repo (android/app/debug.keystore),
+          d.h. neuere Builds lassen sich über ältere installieren. Eine ObsiDine-Version
+          von VOR dieser Umstellung muss einmalig deinstalliert werden." \
             --prerelease \
             --target "$GITHUB_SHA"

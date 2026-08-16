@@ -9,12 +9,29 @@ android {
     namespace = "de.dml.rezeptimporter"
     compileSdk = 35
 
+    signingConfigs {
+        // Fester Debug-Schlüssel im Repo. Ohne ihn signiert jede Maschine — und jeder
+        // CI-Lauf — mit einem frisch erzeugten Keystore; die APK lässt sich dann nicht
+        // über eine bereits installierte legen ("App nicht installiert"). Nur für
+        // Debug-Builds; ein echter Release-Key gehört NIE ins Repo.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "de.dml.rezeptimporter"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "0.1"
+    }
+
+    buildTypes {
+        getByName("debug") { signingConfig = signingConfigs.getByName("debug") }
     }
 
     compileOptions {
