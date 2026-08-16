@@ -1,5 +1,6 @@
 package de.dml.rezeptimporter.link
 
+import de.dml.rezeptimporter.domain.ImportSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -16,7 +17,7 @@ class WebRecipeLinkResolver(
     private val client: OkHttpClient,
 ) : LinkResolver {
 
-    override suspend fun resolve(url: String): String = withContext(Dispatchers.IO) {
+    override suspend fun resolve(url: String): ImportSource = withContext(Dispatchers.IO) {
         val html = fetch(url)
         val text = JsonLdRecipeParser.parse(html)
             ?: throw LinkResolveException(
@@ -25,8 +26,10 @@ class WebRecipeLinkResolver(
             )
         // Portale wie Cookidoo veröffentlichen Zutaten/Nährwerte, aber keine Schritte
         // (abo-gated) — dann wenigstens die Quelle als Zubereitungsverweis mitgeben.
-        if ("Zubereitung:" in text) text
-        else "$text\n\nZubereitung:\n1. Zubereitung siehe Quelle: $url"
+        val complete =
+            if ("Zubereitung:" in text) text
+            else "$text\n\nZubereitung:\n1. Zubereitung siehe Quelle: $url"
+        ImportSource.ofText(ImportSource.LABEL_WEBPAGE, complete, sourceUrl = url)
     }
 
     private fun fetch(url: String): String {

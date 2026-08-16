@@ -1,13 +1,17 @@
 package de.dml.rezeptimporter.llm
 
+import de.dml.rezeptimporter.domain.ImportSource
 import de.dml.rezeptimporter.domain.RecipeDraft
 
 interface LlmExtractor {
+    /** Ob dieser Provider Video als Eingabe verarbeiten kann. */
+    val supportsVideo: Boolean get() = false
+
     /**
-     * Genau ein API-Call. [repairHint] nur beim einen erlaubten Repair-Retry gesetzt
-     * (enthält die Validierungsfehler des ersten Versuchs).
+     * Genau ein API-Call über alle Quellen des Bündels. [repairHint] nur beim einen erlaubten
+     * Repair-Retry gesetzt (enthält die Validierungsfehler des ersten Versuchs).
      */
-    suspend fun extract(rawText: String, repairHint: String? = null): RecipeDraft
+    suspend fun extract(source: ImportSource, repairHint: String? = null): RecipeDraft
 }
 
 open class LlmException(message: String, cause: Throwable? = null) : Exception(message, cause)

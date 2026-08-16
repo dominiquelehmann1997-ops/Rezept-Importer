@@ -1,12 +1,37 @@
 package de.dml.rezeptimporter.llm
 
+import de.dml.rezeptimporter.domain.ImportSource
+
 object ExtractionPrompt {
+    /** Obergrenze je einzelner Textquelle. */
     const val MAX_INPUT_CHARS = 6000
+
+    /** Obergrenze über alle Textquellen zusammen — greift erst bei vielen OCR-Bildern. */
+    const val MAX_TOTAL_INPUT_CHARS = 12000
     const val MAX_OUTPUT_TOKENS = 4096
 
     val INSTRUCTION = """
-        Du extrahierst Kochrezepte aus rohem Text (OCR-Ergebnisse, Social-Media-Captions).
+        Du extrahierst Kochrezepte aus mehreren Quellen zu einem Beitrag: geschriebener Text
+        (Caption, Videobeschreibung, OCR) und teilweise das Video selbst (Bild und Ton).
         Antworte ausschließlich im vorgegebenen JSON-Format. Sprache: Deutsch.
+
+        QUELLEN ZUSAMMENFÜHREN (wichtigste Regel bei mehreren Quellen):
+        - Das Rezept ergibt sich oft erst aus der Kombination: die Caption trägt meist die
+          Zutatenliste mit Mengen, das Video die Reihenfolge, die Technik und die Temperaturen.
+          Werte JEDE Quelle aus und baue EIN vollständiges Rezept daraus.
+        - Fehlt eine Angabe in der einen Quelle, nimm sie aus der anderen. Zutaten, die nur im
+          Video gezeigt oder genannt werden, gehören genauso in die Liste wie die der Caption.
+        - WIDERSPRÜCHE: Eine geschriebene, exakte Menge schlägt eine gesprochene Näherung
+          ("eine Handvoll", "etwas davon"). Nur wenn eine Quelle die Angabe gar nicht hat,
+          zählt die andere. Bei zwei exakten, widersprüchlichen Angaben nimm die Caption.
+        - NICHT DOPPELN: Derselbe Arbeitsschritt steht häufig in Caption UND wird im Video
+          gesprochen. Führe ihn zu EINEM Schritt zusammen, nicht zu zwei. Dasselbe bei Zutaten:
+          eine Zutat = ein Eintrag, auch wenn sie in mehreren Quellen vorkommt.
+        - KEIN BEIWERK: Hashtags, "Rezept unten!", "Folgt mir für mehr", Kanal-Werbung,
+          Musik-Credits, Links und Aufrufe zum Speichern sind kein Rezeptinhalt. Verweise wie
+          "Zutaten im Video" oder "Rezept in der Bio" sind keine Zutat und kein Schritt.
+        - Steht im Video nur Deko/Anrichten ohne neue Information, erzeuge daraus keinen Schritt.
+
         Regeln:
         - ÜBERSETZEN: Ist das Rezept nicht auf Deutsch (z.B. Englisch), übersetze ALLES
           ins Deutsche — "name", Zutaten-Namen, "steps", "tags", "nutrition.basis".
@@ -84,11 +109,33 @@ object ExtractionPrompt {
     }
     """
 
-    fun userMessage(rawText: String, repairHint: String?): String {
-        val capped = rawText.take(MAX_INPUT_CHARS)
+    /**
+     * Rendert das Quellen-Bündel als beschrifteten Textblock. Die Labels sind für das Modell
+     * die einzige Möglichkeit zu erkennen, welche Angabe geschrieben und welche gesprochen ist —
+     * ohne sie lassen sich die Widerspruchs-Regeln oben nicht anwenden.
+     */
+    fun userMessage(source: ImportSource, repairHint: String?): String {
+        val blocks = source.nonEmptyTexts.joinToString("\n\n") { part ->
+            "[Quelle: ${part.label}]\n${part.text.take(MAX_INPUT_CHARS)}"
+        }.take(MAX_TOTAL_INPUT_CHARS)
+
+        val videoNote = if (source.video != null) {
+            "\n\n[Quelle: Das Video selbst ist beigefügt]\nWerte Bild und Ton aus: gesprochene " +
+                "Mengen und Schritte, eingeblendete Texte und Zutaten-Overlays."
+        } else ""
+
         val repair = repairHint?.let {
             "\n\nDein letzter Versuch war ungültig. Fehler: $it\nKorrigiere genau diese Punkte."
         } ?: ""
-        return "Extrahiere das Rezept aus folgendem Text:\n\n$capped$repair"
+
+        val intro =
+            if (source.nonEmptyTexts.size + (if (source.video != null) 1 else 0) > 1) {
+                "Extrahiere EIN Rezept aus den folgenden Quellen desselben Beitrags. " +
+                    "Führe die Quellen zusammen, wie oben beschrieben."
+            } else {
+                "Extrahiere das Rezept aus der folgenden Quelle."
+            }
+
+        return "$intro\n\n$blocks$videoNote$repair"
     }
 }

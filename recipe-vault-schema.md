@@ -49,6 +49,9 @@ export interface RecipeFrontmatter {
   ingredients?: FrontmatterIngredient[];
 
   // ── Nur für die Obsidian-Kochansicht; vom Dashboard-Ingest IGNORIERT ──
+  /** Ursprungslink des Imports (Reel, Video, Rezeptseite). Steht zusätzlich als
+   *  Abschnitt "## Quelle" im Body, damit er in Obsidian anklickbar ist. */
+  source?: string;
   /** Basis-Portionen — Referenz fürs Skalieren der Mengen. */
   servings?: number;
   prepMinutes?: number;

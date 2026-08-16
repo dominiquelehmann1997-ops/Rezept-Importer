@@ -1,7 +1,39 @@
-# Phase 3 (später): Rezept aus Video — Transkription + Frame-OCR (Recime-Stil)
+# Phase 3: Rezept aus Video — Transkription + Frame-OCR (Recime-Stil)
 
-> **Status: ZURÜCKGESTELLT.** Bewusst nicht in Phase 1/2. Hier nur die Architektur-Skizze,
-> damit der Weg dokumentiert ist, wenn er später kommt.
+> **Status: STUFE 1 UMGESETZT.** Video wird ausgewertet, aber ohne eigenes Backend und ohne
+> Video-Download. Der unten skizzierte Weg (Whisper + Frame-OCR) ist damit **hinfällig**:
+> Gemini 2.5 Flash nimmt Video direkt entgegen (Bild *und* Ton) und liefert dasselbe
+> Rezept-JSON wie bisher. Was bleibt, ist die Frage der Video-*Beschaffung* — dafür siehe
+> „Was noch fehlt" unten.
+
+## Was umgesetzt ist (Stufe 1)
+
+- **Quellen-Bündel statt Einzeltext.** `ImportSource` trägt beschriftete Textquellen (Caption,
+  Videobeschreibung, OCR) *und* ein optionales Video. Caption und Video gehen in **denselben**
+  LLM-Call — ein Rezept ergibt sich regelmäßig erst aus beidem.
+- **Merge-Regeln im Prompt:** Vorrang bei Widersprüchen (geschriebene Menge schlägt gesprochene
+  Näherung), Deduplizieren von Schritten, Hashtags/„Rezept unten!" ignorieren.
+- **YouTube inkl. Shorts:** Beschreibung wird gescrapt; trägt sie das Rezept nicht (< 400 Zeichen),
+  geht die Video-URL direkt an Gemini — kein Download nötig.
+- **Geteilte Videodatei:** Intent-Filter für `video/*`, Upload über die Gemini Files API. Die URI
+  wird über alle Calls eines Imports wiederverwendet (Extraktion, Repair-Retry, Übersetzung),
+  sonst würde dasselbe Video dreimal hochgeladen.
+- **Zwei-Schritt-Share für Reels:** Beim Teilen eines Instagram-/TikTok-Links wird die Caption
+  30 Minuten geparkt. Teilt man danach die gespeicherte Videodatei, werden beide Quellen
+  zusammengeführt.
+- **Quelllink in der Notiz:** `source` im Frontmatter plus Abschnitt `## Quelle` im Body.
+
+## Was noch fehlt (Stufe 2)
+
+Der bequeme Fall — *aus Instagram heraus einmal teilen, fertig* — geht weiterhin nicht ohne
+Backend: Android liefert beim Reel-Share nur den Link, und den Video-Download müsste ein Dienst
+übernehmen. Dafür bleibt Option A unten gültig, jetzt aber deutlich kleiner: Der Dienst muss nur
+noch **Video beschaffen**, nicht mehr transkribieren — Gemini erledigt STT und Frame-Lesen selbst.
+Der `BackendVideoResolver` liefert dann ein `ImportSource` und fügt sich in den bestehenden Router.
+
+---
+
+## Ursprüngliche Skizze (überholt, für den Kontext)
 
 ## Problem
 Tier 1/2 holen nur **Text**: JSON-LD (Web), Caption (TikTok/Instagram), Beschreibung (YouTube).

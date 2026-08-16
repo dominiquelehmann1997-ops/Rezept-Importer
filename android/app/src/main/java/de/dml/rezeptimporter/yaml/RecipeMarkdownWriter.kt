@@ -14,6 +14,7 @@ class RecipeMarkdownWriter {
         fm["simple"] = draft.simple
         fm["reheatable"] = draft.reheatable
         fm["vegetarian"] = draft.vegetarian
+        draft.sourceUrl?.takeIf { it.isNotBlank() }?.let { fm["source"] = it }
         if (draft.tags.isNotEmpty()) fm["tags"] = draft.tags
         draft.servings?.let { fm["servings"] = it }
         draft.prepMinutes?.let { fm["prepMinutes"] = it }
@@ -67,6 +68,13 @@ class RecipeMarkdownWriter {
             if (draft.steps.isNotEmpty()) {
                 appendLine("## Zubereitung")
                 draft.steps.forEachIndexed { i, step -> appendLine("${i + 1}. $step") }
+            }
+            // Quelle ans Ende: als nackte URL, die Obsidian im Lesemodus selbst verlinkt —
+            // robuster als Markdown-Links, deren Klammern an Query-Parametern brechen können.
+            draft.sourceUrl?.takeIf { it.isNotBlank() }?.let {
+                appendLine()
+                appendLine("## Quelle")
+                appendLine(it)
             }
         }
         return "---\n$yaml---\n\n$body"

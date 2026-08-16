@@ -230,4 +230,39 @@ class RecipeMarkdownWriterTest {
         val md = writer.render("x", RecipeDraft(name = "X"))
         assertTrue(md.startsWith("---\n"))
     }
+
+    @Test
+    fun writesSourceLinkToFrontmatterAndBody() {
+        val url = "https://www.instagram.com/reel/Cabc123/"
+        val md = writer.render("x", RecipeDraft(name = "X", sourceUrl = url))
+        assertEquals(url, frontmatterOf(md)["source"])
+
+        val body = md.substringAfter("\n---\n")
+        assertTrue(body.contains("## Quelle"))
+        // Nackte URL im Body: Obsidian verlinkt sie im Lesemodus selbst.
+        assertTrue(body.contains(url))
+    }
+
+    @Test
+    fun keepsQueryHeavyUrlsIntact() {
+        // Reel-Links tragen oft ?igsh=… — die dürfen weder umgebrochen noch beschnitten werden.
+        val url = "https://www.instagram.com/reel/Cabc123/?igsh=MzRlODBiNWFlZA%3D%3D&x=1"
+        val md = writer.render("x", RecipeDraft(name = "X", sourceUrl = url))
+        assertEquals(url, frontmatterOf(md)["source"])
+        assertTrue(md.substringAfter("\n---\n").contains(url))
+    }
+
+    @Test
+    fun omitsSourceWhenAbsent() {
+        val md = writer.render("x", RecipeDraft(name = "X"))
+        assertTrue(!md.contains("## Quelle"))
+        assertTrue(!frontmatterOf(md).containsKey("source"))
+    }
+
+    @Test
+    fun omitsSourceWhenBlank() {
+        val md = writer.render("x", RecipeDraft(name = "X", sourceUrl = "   "))
+        assertTrue(!md.contains("## Quelle"))
+        assertTrue(!frontmatterOf(md).containsKey("source"))
+    }
 }

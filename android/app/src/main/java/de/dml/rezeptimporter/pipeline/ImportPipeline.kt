@@ -1,5 +1,6 @@
 package de.dml.rezeptimporter.pipeline
 
+import de.dml.rezeptimporter.domain.ImportSource
 import de.dml.rezeptimporter.domain.RecipeDraft
 import de.dml.rezeptimporter.domain.Slug
 import de.dml.rezeptimporter.llm.LanguageHeuristic
@@ -21,10 +22,16 @@ fun isBareUrl(text: String): Boolean =
  */
 fun extractShareUrl(text: String): String? {
     val trimmed = text.trim()
-    val url = Regex("https?://\\S+").find(trimmed)?.value ?: return null
+    val url = firstUrl(trimmed) ?: return null
     val rest = trimmed.replace(url, "").trim()
     return if (rest.length <= 80) url else null
 }
+
+/**
+ * Erste URL im Text — auch dann, wenn der Text im Kern die Caption ist. Dient als Quellenangabe
+ * für die Obsidian-Notiz, nicht zur Auflösung.
+ */
+fun firstUrl(text: String): String? = Regex("https?://\\S+").find(text)?.value
 
 class ImportPipeline(
     private val extractor: LlmExtractor,
@@ -32,15 +39,21 @@ class ImportPipeline(
     private val writer: RecipeMarkdownWriter,
 ) {
     /**
-     * Rohtext → validierter, deutscher RecipeDraft. Extraktion (max. 2 Calls:
+     * Quellen-Bündel → validierter, deutscher RecipeDraft. Extraktion (max. 2 Calls:
      * 1 Extraktion + 1 Repair-Retry). Anschließend Sprach-Check: ist das Ergebnis
-     * noch Englisch, folgt EIN zusätzlicher Übersetzungs-Pass.
+     * noch Englisch, folgt EIN zusätzlicher Übersetzungs-Pass. Alle Calls sehen dieselben
+     * Quellen; ein enthaltenes Video wird dabei nur einmal hochgeladen.
      */
-    suspend fun extractValidated(rawText: String): RecipeDraft {
-        val german = ensureGerman(rawText, extractCore(rawText))
+    suspend fun extractValidated(source: ImportSource): RecipeDraft {
+        val german = ensureGerman(source, extractCore(source))
         // Vegetarisch-Status immer heuristisch aus den (deutschen) Zutaten ableiten;
         // im Preview kann der Nutzer ihn überschreiben.
-        return german.copy(vegetarian = VegetarianHeuristic.isVegetarian(german))
+        return german.copy(
+            vegetarian = VegetarianHeuristic.isVegetarian(german),
+            // Quelllink kommt nicht vom LLM, sondern aus dem Bündel — sonst würde das Modell
+            // ihn halluzinieren oder aus der Caption raten.
+            sourceUrl = source.sourceUrl,
+        )
     }
 
     /**
@@ -48,10 +61,10 @@ class ImportPipeline(
      * Übersetzungs-Pass durch dieselbe LLM-Pipeline. Schlägt der fehl oder bleibt
      * das Ergebnis englisch, wird der ursprüngliche (valide) Draft behalten.
      */
-    private suspend fun ensureGerman(rawText: String, draft: RecipeDraft): RecipeDraft {
+    private suspend fun ensureGerman(source: ImportSource, draft: RecipeDraft): RecipeDraft {
         if (!LanguageHeuristic.isLikelyEnglish(draft)) return draft
         return try {
-            val translated = extractor.extract(rawText, repairHint = TRANSLATE_HINT)
+            val translated = extractor.extract(source, repairHint = TRANSLATE_HINT)
             if (problemsOf(translated).isEmpty() && !LanguageHeuristic.isLikelyEnglish(translated)) {
                 translated
             } else {
@@ -62,10 +75,10 @@ class ImportPipeline(
         }
     }
 
-    private suspend fun extractCore(rawText: String): RecipeDraft {
+    private suspend fun extractCore(source: ImportSource): RecipeDraft {
         val firstProblems: List<String>
         try {
-            val first = extractor.extract(rawText)
+            val first = extractor.extract(source)
             val problems = problemsOf(first)
             if (problems.isEmpty()) return first
             firstProblems = problems
@@ -73,13 +86,13 @@ class ImportPipeline(
             throw e   // Technik-Fehler: Retry sinnlos, Fallback-Logik liegt im Extractor
         } catch (e: LlmException) {
             // Semantischer Fehlschlag (z.B. leerer Name) — ein Repair-Versuch
-            val second = extractor.extract(rawText, repairHint = e.message ?: "ungültige Antwort")
+            val second = extractor.extract(source, repairHint = e.message ?: "ungültige Antwort")
             val secondProblems = problemsOf(second)
             if (secondProblems.isEmpty()) return second
             throw LlmException("Extraktion nach Repair-Retry weiterhin ungültig: ${secondProblems.joinToString("; ")}")
         }
 
-        val second = extractor.extract(rawText, repairHint = firstProblems.joinToString("; "))
+        val second = extractor.extract(source, repairHint = firstProblems.joinToString("; "))
         val secondProblems = problemsOf(second)
         if (secondProblems.isEmpty()) return second
         throw LlmException("Extraktion nach Repair-Retry weiterhin ungültig: ${secondProblems.joinToString("; ")}")

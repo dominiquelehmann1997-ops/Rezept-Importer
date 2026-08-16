@@ -44,4 +44,10 @@ data class RecipeDraft(
     val reheatable: Boolean = false,
     /** Heuristisch aus den Zutaten gesetzt (kein Fleisch/Fisch ⇒ true), im Preview togglebar. */
     val vegetarian: Boolean = true,
+    /**
+     * Ursprungslink (Reel, Video, Rezeptseite). Kommt aus dem Quellen-Bündel, nie vom LLM.
+     * Landet als `source` im Frontmatter und als Abschnitt "## Quelle" in der Notiz, damit
+     * man sich das Video später nochmal ansehen kann.
+     */
+    val sourceUrl: String? = null,
 )

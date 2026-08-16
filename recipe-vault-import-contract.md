@@ -76,6 +76,9 @@ Obsidian:
 
 - Frontmatter: `servings`, `prepMinutes`, `cookMinutes`, `nutrition` (kcal/protein/…)
   → derzeit **kein** App-Effekt.
+- Frontmatter: `source` — Ursprungslink des Imports (Reel, Video, Rezeptseite). Der Importer
+  schreibt ihn zusätzlich als Abschnitt `## Quelle` in den Body, damit er in Obsidian
+  anklickbar ist. Für den Ingest unsichtbar.
 - **Der gesamte Markdown-Body** (`## Zubereitung`, Schritte, Fließtext, Bilder)
   → wird geparst aber verworfen. Die App speichert **keine** Kochanleitung.
 

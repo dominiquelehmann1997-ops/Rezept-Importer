@@ -26,6 +26,8 @@ fun PreviewScreen(
     defaultFolder: String,
     onSave: (RecipeDraft, String) -> Unit,
     onCancel: () -> Unit,
+    /** Optionaler Hinweis über der Vorschau, z.B. auf den Video-Nachschlag beim Reel-Import. */
+    hint: String? = null,
 ) {
     var draft by remember { mutableStateOf(initial) }
     var folder by remember { mutableStateOf(defaultFolder) }
@@ -45,6 +47,18 @@ fun PreviewScreen(
                     modifier = Modifier.weight(1f),
                 )
                 ArcaneTag("[VORSCHAU]")
+            }
+        }
+
+        if (hint != null) {
+            item {
+                ArcaneCard {
+                    Text(
+                        hint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
@@ -215,6 +229,22 @@ fun PreviewScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                 }
+            }
+        }
+
+        item {
+            ArcaneCard {
+                Text("Quelle", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = draft.sourceUrl.orEmpty(),
+                    onValueChange = { draft = draft.copy(sourceUrl = it.ifBlank { null }) },
+                    label = { Text("Link zum Original") },
+                    supportingText = { Text("Steht später im Rezept, um das Video nochmal anzusehen.") },
+                    colors = arcaneTextFieldColors(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
 

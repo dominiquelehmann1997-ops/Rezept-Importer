@@ -1,5 +1,6 @@
 package de.dml.rezeptimporter.llm
 
+import de.dml.rezeptimporter.domain.ImportSource
 import de.dml.rezeptimporter.domain.RecipeDraft
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,10 +18,17 @@ class HaikuExtractor(
     private val model: String = "claude-haiku-4-5",
 ) : LlmExtractor {
 
-    override suspend fun extract(rawText: String, repairHint: String?): RecipeDraft =
+    override suspend fun extract(source: ImportSource, repairHint: String?): RecipeDraft =
         withContext(Dispatchers.IO) {
+            // Der Aufrufer wählt bei Video-Quellen bereits Gemini; das hier ist die Absicherung,
+            // damit ein Video nicht stillschweigend unter den Tisch fällt.
+            if (source.video != null) {
+                throw LlmException(
+                    "Video-Import läuft nur über Gemini — in den Einstellungen einen Gemini-Key eintragen."
+                )
+            }
             try {
-                doExtract(rawText, repairHint)
+                doExtract(source, repairHint)
             } catch (e: LlmException) {
                 throw e
             } catch (e: IOException) {
@@ -30,7 +38,7 @@ class HaikuExtractor(
             }
         }
 
-    private fun doExtract(rawText: String, repairHint: String?): RecipeDraft {
+    private fun doExtract(source: ImportSource, repairHint: String?): RecipeDraft {
         val body = buildJsonObject {
             put("model", model)
             put("max_tokens", ExtractionPrompt.MAX_OUTPUT_TOKENS)
@@ -46,7 +54,7 @@ class HaikuExtractor(
             putJsonArray("messages") {
                 addJsonObject {
                     put("role", "user")
-                    put("content", ExtractionPrompt.userMessage(rawText, repairHint))
+                    put("content", ExtractionPrompt.userMessage(source, repairHint))
                 }
             }
         }

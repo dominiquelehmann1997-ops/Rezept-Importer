@@ -1,5 +1,6 @@
 package de.dml.rezeptimporter.link
 
+import de.dml.rezeptimporter.domain.ImportSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -13,25 +14,27 @@ import java.net.URLEncoder
  * - Instagram: kein nutzbarer öffentlicher oEmbed → og:description der Seite (best effort, bricht ohne
  *   Login auf manchen Beiträgen weg).
  *
- * Steht das Rezept nur im Video und nicht in der Caption, gibt es keine Textquelle → Fehlermeldung
- * (kein Video-Transkript — bewusst aus dem Scope gestrichen).
+ * Das Video selbst ist über den Link nicht erreichbar (Download wäre ToS-grau und bräuchte ein
+ * Backend). Die Caption wird deshalb geparkt: teilt der Nutzer danach die gespeicherte Videodatei,
+ * gehen Caption und Video gemeinsam in denselben LLM-Call.
  */
 class SocialCaptionLinkResolver(
     private val client: OkHttpClient,
     private val tiktokOEmbedBase: String = "https://www.tiktok.com",
 ) : LinkResolver {
 
-    override suspend fun resolve(url: String): String = withContext(Dispatchers.IO) {
+    override suspend fun resolve(url: String): ImportSource = withContext(Dispatchers.IO) {
         val caption = if (LinkHosts.isTikTok(url)) {
             tiktokCaption(url) ?: ogCaption(url)
         } else {
             ogCaption(url)
         }
-        caption?.trim()?.ifBlank { null }
+        val text = caption?.trim()?.ifBlank { null }
             ?: throw LinkResolveException(
                 "Keine Caption gefunden — das Rezept steht vermutlich nur im Video, nicht im Text.\n" +
-                "Tipp: Screenshot der Caption teilen."
+                "Tipp: Video speichern und mit ObsidiDine teilen, dann liest die App das Video selbst."
             )
+        ImportSource.ofText(ImportSource.LABEL_CAPTION, text, sourceUrl = url)
     }
 
     private fun tiktokCaption(url: String): String? {

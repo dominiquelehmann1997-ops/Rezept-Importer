@@ -1,5 +1,6 @@
 package de.dml.rezeptimporter.llm
 
+import de.dml.rezeptimporter.domain.SourceVideo
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -42,7 +43,7 @@ class HaikuExtractorTest {
             )
         )
 
-        val draft = extractor.extract("roher text")
+        val draft = extractor.extract(src("roher text"))
 
         assertEquals("Curry", draft.name)
         assertEquals("g", draft.ingredients[0].unit)
@@ -63,7 +64,7 @@ class HaikuExtractorTest {
             MockResponse().setBody("""{"content":[{"type":"text","text":"kann nicht"}],"stop_reason":"end_turn"}""")
         )
         try {
-            extractor.extract("text")
+            extractor.extract(src("text"))
             throw AssertionError("expected LlmException")
         } catch (e: LlmException) {
             assertTrue(e.message!!.contains("tool_use"))
@@ -74,11 +75,30 @@ class HaikuExtractorTest {
     fun wrapsHttpErrorInLlmException() = runTest {
         server.enqueue(MockResponse().setResponseCode(529).setBody("""{"type":"error","error":{"type":"overloaded_error"}}"""))
         try {
-            extractor.extract("text")
+            extractor.extract(src("text"))
             throw AssertionError("expected LlmException")
         } catch (e: LlmException) {
             assertTrue(e.message!!.contains("529"))
             assertTrue("HTTP-Fehler muss LlmTransportException sein", e is LlmTransportException)
         }
+    }
+
+    @Test
+    fun refusesVideoSourcesInsteadOfSilentlyDroppingThem() = runTest {
+        // Anthropic nimmt kein Video entgegen. Lieber ein klarer Hinweis als ein Rezept,
+        // dem unbemerkt die halbe Quelle fehlt.
+        val withVideo = src("caption").copy(video = SourceVideo.Remote("https://youtu.be/x"))
+        try {
+            extractor.extract(withVideo)
+            throw AssertionError("expected LlmException")
+        } catch (e: LlmException) {
+            assertTrue(e.message!!.contains("Gemini"))
+        }
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun doesNotAdvertiseVideoSupport() {
+        assertEquals(false, extractor.supportsVideo)
     }
 }

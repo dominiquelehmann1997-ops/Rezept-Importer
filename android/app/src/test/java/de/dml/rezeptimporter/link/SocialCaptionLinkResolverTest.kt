@@ -25,7 +25,7 @@ class SocialCaptionLinkResolverTest {
 
     @Test fun tiktokCaptionViaOEmbed() = runTest {
         server.enqueue(MockResponse().setBody("""{"title":"Curry mit Kokosmilch und 250g Reis"}"""))
-        val text = resolver.resolve("https://www.tiktok.com/@koch/video/123")
+        val text = resolver.resolve("https://www.tiktok.com/@koch/video/123").texts.single().text
         assertTrue(text.contains("Curry mit Kokosmilch"))
     }
 
@@ -36,7 +36,7 @@ class SocialCaptionLinkResolverTest {
                 """<meta property="og:description" content="50 likes - koch: Lasagne mit 500g Hack">"""
             )
         )
-        val text = resolver.resolve(server.url("/p/abc").toString())
+        val text = resolver.resolve(server.url("/p/abc").toString()).texts.single().text
         assertTrue(text.contains("Lasagne mit 500g Hack"))
     }
 

@@ -1,6 +1,8 @@
 package de.dml.rezeptimporter.llm
 
+import de.dml.rezeptimporter.domain.ImportSource
 import de.dml.rezeptimporter.domain.RecipeDraft
+import de.dml.rezeptimporter.domain.SourceVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
@@ -15,6 +17,7 @@ class GeminiExtractor(
     private val client: OkHttpClient,
     private val baseUrl: String = "https://generativelanguage.googleapis.com",
     private val model: String = "gemini-2.5-flash",
+    private val uploader: GeminiFileUploader = GeminiFileUploader(apiKey, client, baseUrl),
 ) : LlmExtractor {
 
     // Gemini responseSchema = OpenAPI-Subset, Typen GROSS, kein additionalProperties.
@@ -61,10 +64,15 @@ class GeminiExtractor(
         putJsonArray("required") { add("name"); add("ingredients"); add("steps") }
     }
 
-    override suspend fun extract(rawText: String, repairHint: String?): RecipeDraft =
-        withContext(Dispatchers.IO) {
+    override val supportsVideo: Boolean = true
+
+    override suspend fun extract(source: ImportSource, repairHint: String?): RecipeDraft {
+        // Upload vor dem IO-Block: er ist selbst suspend (Polling bis ACTIVE) und liefert
+        // bei mehreren Calls dieselbe URI aus dem Cache.
+        val uploadedVideo = videoPart(source.video)
+        return withContext(Dispatchers.IO) {
             try {
-                doExtract(rawText, repairHint)
+                doExtract(source, uploadedVideo, repairHint)
             } catch (e: LlmException) {
                 throw e
             } catch (e: IOException) {
@@ -73,15 +81,42 @@ class GeminiExtractor(
                 throw LlmException("Gemini-Aufruf fehlgeschlagen: ${e.message}", e)
             }
         }
+    }
 
-    private fun doExtract(rawText: String, repairHint: String?): RecipeDraft {
+    /**
+     * Lokale Datei → Files-API-Upload; YouTube-URL → direkt referenzieren, Gemini ruft sie
+     * selbst ab (mimeType entfällt dabei).
+     */
+    private suspend fun videoPart(video: SourceVideo?): JsonObject? = when (video) {
+        null -> null
+        is SourceVideo.Remote -> buildJsonObject {
+            putJsonObject("fileData") { put("fileUri", video.url) }
+        }
+        is SourceVideo.Local -> {
+            val uri = uploader.uploadedUri(video.file, video.mimeType)
+            buildJsonObject {
+                putJsonObject("fileData") {
+                    put("mimeType", video.mimeType)
+                    put("fileUri", uri)
+                }
+            }
+        }
+    }
+
+    private fun doExtract(
+        source: ImportSource,
+        videoPart: JsonObject?,
+        repairHint: String?,
+    ): RecipeDraft {
         val body = buildJsonObject {
             putJsonArray("contents") {
                 addJsonObject {
                     putJsonArray("parts") {
+                        // Video zuerst: Gemini verarbeitet Medien vor der Anweisung stabiler.
+                        videoPart?.let { add(it) }
                         addJsonObject {
                             put("text", ExtractionPrompt.INSTRUCTION + "\n\n" +
-                                ExtractionPrompt.userMessage(rawText, repairHint))
+                                ExtractionPrompt.userMessage(source, repairHint))
                         }
                     }
                 }

@@ -29,6 +29,11 @@
       "items": { "type": "string" },
       "description": "Wird als JSON-String gespeichert."
     },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Ursprungslink (Reel, Video, Rezeptseite). Nur für Menschen in Obsidian; Ingest ignoriert es."
+    },
     "ingredients": {
       "type": "array",
       "items": {

@@ -31,7 +31,7 @@ class WebRecipeLinkResolverTest {
             )
         )
 
-        val text = resolver.resolve(server.url("/rezept").toString())
+        val text = resolver.resolve(server.url("/rezept").toString()).texts.single().text
         assertTrue(text.contains("Risotto"))
         assertTrue(text.contains("Reis"))
     }
@@ -49,7 +49,7 @@ class WebRecipeLinkResolverTest {
         )
 
         val url = server.url("/recipes/recipe/de-DE/r802484").toString()
-        val text = resolver.resolve(url)
+        val text = resolver.resolve(url).texts.single().text
         assertTrue(text.contains("Zubereitung"))
         assertTrue(text.contains(url))
     }
