@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import de.dml.rezeptimporter.domain.IngredientDraft
 import de.dml.rezeptimporter.domain.RecipeDraft
+import de.dml.rezeptimporter.domain.moved
 import de.dml.rezeptimporter.ui.theme.ArcaneCard
 import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
 import de.dml.rezeptimporter.ui.theme.ArcaneSecondaryButton
@@ -223,24 +226,36 @@ fun PreviewScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 draft.steps.forEachIndexed { i, step ->
-                    Row(verticalAlignment = Alignment.Top) {
+                    // Kopfzeile: Nummer + Reihenfolge/Löschen. Das Textfeld darunter bekommt
+                    // so die volle Breite — auf dem Handy sonst zu schmal für lange Schritte.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "${i + 1}.",
                             style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier
-                                .width(28.dp)
-                                .padding(top = 20.dp),
-                        )
-                        OutlinedTextField(
-                            value = step,
-                            onValueChange = { v ->
-                                draft = draft.copy(steps = draft.steps.toMutableList()
-                                    .also { it[i] = v })
-                            },
-                            minLines = 2,
-                            colors = arcaneTextFieldColors(),
                             modifier = Modifier.weight(1f),
                         )
+                        IconButton(
+                            onClick = { draft = draft.copy(steps = draft.steps.moved(i, i - 1)) },
+                            enabled = i > 0,
+                        ) {
+                            Icon(
+                                Icons.Filled.KeyboardArrowUp,
+                                contentDescription = "Schritt nach oben",
+                                tint = if (i > 0) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline,
+                            )
+                        }
+                        IconButton(
+                            onClick = { draft = draft.copy(steps = draft.steps.moved(i, i + 1)) },
+                            enabled = i < draft.steps.lastIndex,
+                        ) {
+                            Icon(
+                                Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "Schritt nach unten",
+                                tint = if (i < draft.steps.lastIndex) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline,
+                            )
+                        }
                         IconButton(onClick = {
                             draft = draft.copy(
                                 steps = draft.steps.filterIndexed { idx, _ -> idx != i },
@@ -253,7 +268,17 @@ fun PreviewScreen(
                             )
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = step,
+                        onValueChange = { v ->
+                            draft = draft.copy(steps = draft.steps.toMutableList()
+                                .also { it[i] = v })
+                        },
+                        minLines = 2,
+                        colors = arcaneTextFieldColors(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
                 }
                 ArcaneSecondaryButton("+ Schritt", { draft = draft.copy(steps = draft.steps + "") })
             }
