@@ -54,9 +54,9 @@ Quelle der Wahrheit für das Zielformat ist der Parser des Haushalts-Dashboards
 | `unit` | string\|number | nein | `null` | wie amount (`g`, `ml`, `Stk`, `EL`). |
 | `freshness` | `frisch`\|`haltbar` | nein | `null` | Explizite Haltbarkeit. Anderer Wert ⇒ App rät per Heuristik. |
 
-**Ignoriert (aber erlaubt, für Obsidian gut):** `description`, `servings`,
-`prepMinutes`, `cookMinutes`, `nutrition`, pro Zutat `section` (Gruppe wie
-„Für die Soße"), und der **ganze Markdown-Body**. Übernimm vorhandene solche
+**Ignoriert (aber erlaubt, für Obsidian gut):** `servings`, `prepMinutes`,
+`cookMinutes`, `nutrition`, pro Zutat `section` (Gruppe wie „Für die Soße"),
+und der **ganze Markdown-Body**. Übernimm vorhandene solche
 Daten ruhig — sie schaden nicht.
 
 ## 3. Der `id`/Slug — wichtigste Regel

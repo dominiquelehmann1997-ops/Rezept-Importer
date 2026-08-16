@@ -22,7 +22,6 @@ class GeminiExtractor(
         put("type", "OBJECT")
         putJsonObject("properties") {
             putJsonObject("name") { put("type", "STRING") }
-            putJsonObject("description") { put("type", "STRING") }
             putJsonObject("tags") {
                 put("type", "ARRAY"); putJsonObject("items") { put("type", "STRING") }
             }

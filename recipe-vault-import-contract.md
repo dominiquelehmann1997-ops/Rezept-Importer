@@ -75,8 +75,8 @@ Das Template (`docs/recipe-vault-template.md`) zeigt zur Lesbarkeit zusätzliche
 Felder. **Der Ingest ignoriert sie vollständig** — sie leben nur für Menschen in
 Obsidian:
 
-- Frontmatter: `description`, `servings`, `prepMinutes`, `cookMinutes`,
-  `nutrition` (kcal/protein/…) → derzeit **kein** App-Effekt.
+- Frontmatter: `servings`, `prepMinutes`, `cookMinutes`, `nutrition` (kcal/protein/…)
+  → derzeit **kein** App-Effekt.
 - Pro Zutat: `section` — Zutaten-Gruppe der Quelle („Für die Nuggets", „Für die
   Soße"). Der Importer bündelt die Zutaten im Body unter fetten Zwischenzeilen
   (`**Für die Soße**`, bewusst keine `###`-Überschrift: die würde den
@@ -140,7 +140,6 @@ keine Zutaten.)
 ---
 id: gemuese-curry
 name: Gemüse-Curry mit Kokosmilch
-description: Cremiges Curry aus einem Topf — schmeckt aufgewärmt noch besser.
 rating: favorit
 simple: true
 reheatable: true
@@ -157,8 +156,6 @@ ingredients:
   - { name: Currypaste, amount: 2, unit: EL, freshness: haltbar, section: Für das Curry }
   - { name: Reis, amount: 250, unit: g, freshness: haltbar, section: Zum Servieren }
 ---
-
-Cremiges Curry aus einem Topf — schmeckt aufgewärmt noch besser.
 
 ## Zutaten
 *Für <span data-qty-parse>4 Portionen</span>*
@@ -178,8 +175,8 @@ Cremiges Curry aus einem Topf — schmeckt aufgewärmt noch besser.
 ```
 
 Vom Ingest übernommen: name, id→slug, rating=favorit, simple, reheatable, tags
-(als JSON), 4 Zutaten mit amount/unit/freshness. Ignoriert: description, section,
-servings, prepMinutes, cookMinutes, nutrition, der ganze Body.
+(als JSON), 4 Zutaten mit amount/unit/freshness. Ignoriert: section, servings,
+prepMinutes, cookMinutes, nutrition, der ganze Body.
 
 ---
 

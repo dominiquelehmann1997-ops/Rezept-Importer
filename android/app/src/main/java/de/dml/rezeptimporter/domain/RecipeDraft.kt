@@ -37,11 +37,6 @@ data class NutritionDraft(
 @Serializable
 data class RecipeDraft(
     val name: String,
-    /**
-     * Freitext-Beschreibung/Notiz zum Rezept. Aus der Quelle übernommen, im Preview
-     * frei editier- und ergänzbar. Landet im Frontmatter und als Absatz im Body.
-     */
-    val description: String? = null,
     val tags: List<String> = emptyList(),
     val servings: Int? = null,
     val prepMinutes: Int? = null,

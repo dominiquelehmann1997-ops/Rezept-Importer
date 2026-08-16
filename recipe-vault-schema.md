@@ -51,8 +51,6 @@ export interface RecipeFrontmatter {
   ingredients?: FrontmatterIngredient[];
 
   // ── Nur für die Obsidian-Kochansicht; vom Dashboard-Ingest IGNORIERT ──
-  /** Freitext-Beschreibung/Notiz; steht zusätzlich als Absatz im Body. */
-  description?: string;
   /** Basis-Portionen — Referenz fürs Skalieren der Mengen. */
   servings?: number;
   prepMinutes?: number;
@@ -112,10 +110,6 @@ Parser konsumierte Kern.
       "type": "string",
       "minLength": 1,
       "description": "Pflicht. Leer/fehlend ⇒ Datei verworfen."
-    },
-    "description": {
-      "type": "string",
-      "description": "Freitext-Beschreibung/Notiz. Nur Obsidian; Ingest ignoriert."
     },
     "rating": {
       "type": "string",

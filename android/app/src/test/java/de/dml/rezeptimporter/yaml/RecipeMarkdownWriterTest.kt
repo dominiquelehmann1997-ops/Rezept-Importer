@@ -196,29 +196,6 @@ class RecipeMarkdownWriterTest {
     }
 
     @Test
-    fun rendersDescriptionInFrontmatterAndBody() {
-        val draft = RecipeDraft(
-            name = "X",
-            description = "Knusprige Nuggets mit scharfer Soße.",
-            ingredients = listOf(IngredientDraft("Ei")),
-        )
-        val md = writer.render("x", draft)
-        assertEquals("Knusprige Nuggets mit scharfer Soße.", frontmatterOf(md)["description"])
-        val body = md.substringAfter("\n---\n")
-        // Einleitungsabsatz steht vor der ersten Überschrift.
-        assertTrue(body.trimStart().startsWith("Knusprige Nuggets mit scharfer Soße."))
-        assertTrue(body.indexOf("Knusprige") < body.indexOf("## Zutaten"))
-    }
-
-    @Test
-    fun omitsDescriptionWhenBlank() {
-        val md = writer.render("x", RecipeDraft(name = "X", description = "   "))
-        assertTrue(!frontmatterOf(md).containsKey("description"))
-        val blank = writer.render("x", RecipeDraft(name = "X"))
-        assertTrue(!frontmatterOf(blank).containsKey("description"))
-    }
-
-    @Test
     fun rendersIngredientSectionsAsGroupedBodyBlocks() {
         val draft = RecipeDraft(
             name = "Nuggets",

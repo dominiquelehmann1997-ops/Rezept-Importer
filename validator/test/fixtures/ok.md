@@ -1,7 +1,6 @@
 ---
 id: gemuese-curry
 name: Gemüse-Curry mit Kokosmilch
-description: Cremiges Curry aus einem Topf — schmeckt aufgewärmt noch besser.
 rating: favorit
 simple: true
 reheatable: true
@@ -18,8 +17,6 @@ ingredients:
   - { name: Currypaste, amount: 2, unit: EL, freshness: haltbar, section: Für das Curry }
   - { name: Reis, amount: 250, unit: g, freshness: haltbar, section: Zum Servieren }
 ---
-
-Cremiges Curry aus einem Topf — schmeckt aufgewärmt noch besser.
 
 ## Zutaten
 *Für <span data-qty-parse>4 Portionen</span>*

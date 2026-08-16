@@ -69,12 +69,11 @@ class RecipeJsonMapperTest {
     }
 
     @Test
-    fun parsesDescriptionAndIngredientSections() {
+    fun parsesIngredientSections() {
         val json = Json.parseToJsonElement(
             """
             {
               "name": "Nuggets",
-              "description": "  Knusprig aus dem Ofen.  ",
               "ingredients": [
                 {"name": "Hähnchenbrust", "amount": "500", "unit": "g", "section": "Für die Nuggets"},
                 {"name": "Ketchup", "section": "Für die Soße:"},
@@ -85,18 +84,71 @@ class RecipeJsonMapperTest {
             """
         ).jsonObject
         val draft = RecipeJsonMapper.fromJson(json)
-        assertEquals("Knusprig aus dem Ofen.", draft.description)
         assertEquals("Für die Nuggets", draft.ingredients[0].section)
         assertEquals("Für die Soße", draft.ingredients[1].section)   // Doppelpunkt fliegt raus
         assertEquals(null, draft.ingredients[2].section)             // leer ⇒ keine Gruppe
     }
 
+    /** Reispapier-Hähnchenbites-Fall: Überschrift "Dip" ohne Doppelpunkt mitten in der Liste. */
     @Test
-    fun descriptionNullWhenAbsent() {
-        val draft = RecipeJsonMapper.fromJson(
-            Json.parseToJsonElement("""{"name":"X","ingredients":[],"steps":[]}""").jsonObject
-        )
-        assertEquals(null, draft.description)
+    fun turnsHeadingLikeIngredientIntoSection() {
+        val json = Json.parseToJsonElement(
+            """
+            {
+              "name": "Reispapier Hähnchenbites",
+              "ingredients": [
+                {"name": "Hähnchenbrust", "amount": "300", "unit": "g"},
+                {"name": "Salz & Pfeffer"},
+                {"name": "Dip"},
+                {"name": "Skyr", "amount": "150", "unit": "g"},
+                {"name": "Mayonnaise light", "amount": "1", "unit": "EL"}
+              ],
+              "steps": []
+            }
+            """
+        ).jsonObject
+        val draft = RecipeJsonMapper.fromJson(json)
+        // "Dip" ist keine Zutat mehr …
+        assertEquals(4, draft.ingredients.size)
+        assertEquals(listOf("Hähnchenbrust", "Salz & Pfeffer", "Skyr", "Mayonnaise light"),
+            draft.ingredients.map { it.name })
+        // … sondern Gruppe der folgenden Zutaten.
+        assertEquals(null, draft.ingredients[0].section)
+        assertEquals(null, draft.ingredients[1].section)   // "Salz & Pfeffer" bleibt Zutat
+        assertEquals("Dip", draft.ingredients[2].section)
+        assertEquals("Dip", draft.ingredients[3].section)
+    }
+
+    @Test
+    fun turnsColonAndForPhraseHeadingsIntoSections() {
+        val json = Json.parseToJsonElement(
+            """
+            {
+              "name": "X",
+              "ingredients": [
+                {"name": "Für die Soße:"},
+                {"name": "Öl", "amount": "2", "unit": "EL"},
+                {"name": "Zum Servieren"},
+                {"name": "Reis", "amount": "250", "unit": "g"}
+              ],
+              "steps": []
+            }
+            """
+        ).jsonObject
+        val draft = RecipeJsonMapper.fromJson(json)
+        assertEquals(listOf("Öl", "Reis"), draft.ingredients.map { it.name })
+        assertEquals("Für die Soße", draft.ingredients[0].section)
+        assertEquals("Zum Servieren", draft.ingredients[1].section)
+    }
+
+    @Test
+    fun keepsTrailingHeadingLikeEntryAsIngredient() {
+        // Steht so ein Eintrag ganz am Ende, folgt ihm keine Zutat — dann ist es keine Gruppe.
+        val json = Json.parseToJsonElement(
+            """{"name":"X","ingredients":[{"name":"Reis","amount":"250"},{"name":"Sauce"}],"steps":[]}"""
+        ).jsonObject
+        val draft = RecipeJsonMapper.fromJson(json)
+        assertEquals(listOf("Reis", "Sauce"), draft.ingredients.map { it.name })
     }
 
     @Test

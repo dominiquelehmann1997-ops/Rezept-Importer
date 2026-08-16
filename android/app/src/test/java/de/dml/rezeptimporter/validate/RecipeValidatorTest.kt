@@ -25,12 +25,11 @@ class RecipeValidatorTest {
     }
 
     @Test
-    fun acceptsDescriptionAndIngredientSection() {
+    fun acceptsIngredientSection() {
         val md = """
             ---
             id: nuggets
             name: Nuggets
-            description: Knusprig aus dem Ofen.
             ingredients:
               - { name: Hähnchenbrust, amount: 500, unit: g, section: Für die Nuggets }
               - { name: Ketchup, section: Für die Soße }

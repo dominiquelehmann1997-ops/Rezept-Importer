@@ -17,10 +17,6 @@
       "minLength": 1,
       "description": "Pflicht. Leer/fehlend ⇒ Datei verworfen."
     },
-    "description": {
-      "type": "string",
-      "description": "Freitext-Beschreibung/Notiz. Nur Obsidian; Ingest ignoriert."
-    },
     "rating": {
       "type": "string",
       "enum": ["favorit", "ok", "selten"],

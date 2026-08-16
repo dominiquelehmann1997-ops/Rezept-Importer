@@ -51,11 +51,10 @@ describe("parseRecipeMarkdown", () => {
     ]);
   });
 
-  it("ignores description and ingredient sections (Obsidian-only fields)", () => {
+  it("ignores ingredient sections (Obsidian-only field)", () => {
     const md = `---
 id: nuggets
 name: Nuggets
-description: Knusprig aus dem Ofen.
 ingredients:
   - { name: Ketchup, amount: 3, unit: EL, section: Für die Soße }
 ---
@@ -65,7 +64,6 @@ ingredients:
     expect(recipe!.ingredients).toEqual([
       { name: "Ketchup", amount: "3", unit: "EL", category: null },
     ]);
-    expect(recipe).not.toHaveProperty("description");
   });
 
   it("rejects the whole file when name is missing", () => {

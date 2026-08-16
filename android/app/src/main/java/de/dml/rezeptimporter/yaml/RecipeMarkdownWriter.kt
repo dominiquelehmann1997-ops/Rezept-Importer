@@ -10,7 +10,6 @@ class RecipeMarkdownWriter {
         val fm = linkedMapOf<String, Any>()
         fm["id"] = id
         fm["name"] = draft.name
-        draft.description?.trim()?.takeIf { it.isNotEmpty() }?.let { fm["description"] = it }
         fm["rating"] = draft.rating
         fm["simple"] = draft.simple
         fm["reheatable"] = draft.reheatable
@@ -46,11 +45,6 @@ class RecipeMarkdownWriter {
         val yaml = Yaml(options).dump(fm)
 
         val body = buildString {
-            // Beschreibung als Einleitungsabsatz vor der ersten Überschrift.
-            draft.description?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                appendLine(it)
-                appendLine()
-            }
             if (draft.ingredients.isNotEmpty()) {
                 appendLine("## Zutaten")
                 // Basis-Portionen sichtbar im Text; data-qty-parse lässt Recipe-View die Zahl

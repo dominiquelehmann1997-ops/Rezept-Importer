@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -106,32 +107,6 @@ fun PreviewScreen(
                     )
                     Text("vegetarisch", style = MaterialTheme.typography.bodyMedium)
                 }
-            }
-        }
-
-        item {
-            ArcaneCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Beschreibung",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    ArcaneTag(if (draft.description.isNullOrBlank()) "[LEER]" else "[TEXT]")
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = draft.description ?: "",
-                    onValueChange = { v ->
-                        // Writer trimmt und lässt reine Leerzeichen weg — hier nur roh durchreichen.
-                        draft = draft.copy(description = v.ifEmpty { null })
-                    },
-                    label = { Text("Beschreibung / Notiz") },
-                    placeholder = { Text("Eigener Text zum Rezept — frei änderbar") },
-                    minLines = 3,
-                    colors = arcaneTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
         }
 
@@ -248,12 +223,39 @@ fun PreviewScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 draft.steps.forEachIndexed { i, step ->
-                    Text(
-                        "${i + 1}. $step",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(
+                            "${i + 1}.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier
+                                .width(28.dp)
+                                .padding(top = 20.dp),
+                        )
+                        OutlinedTextField(
+                            value = step,
+                            onValueChange = { v ->
+                                draft = draft.copy(steps = draft.steps.toMutableList()
+                                    .also { it[i] = v })
+                            },
+                            minLines = 2,
+                            colors = arcaneTextFieldColors(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = {
+                            draft = draft.copy(
+                                steps = draft.steps.filterIndexed { idx, _ -> idx != i },
+                            )
+                        }) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Schritt löschen",
+                                tint = MaterialTheme.colorScheme.tertiary,
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(4.dp))
                 }
+                ArcaneSecondaryButton("+ Schritt", { draft = draft.copy(steps = draft.steps + "") })
             }
         }
 
@@ -292,7 +294,17 @@ fun PreviewScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ArcanePrimaryButton(
                     "In Vault speichern",
-                    { onSave(draft, folder) },
+                    {
+                        // Leer gelassene Schritte/Zutaten fliegen raus — sonst landen leere
+                        // Listenpunkte in der Notiz bzw. scheitert die Schema-Validierung.
+                        onSave(
+                            draft.copy(
+                                steps = draft.steps.map { it.trim() }.filter { it.isNotEmpty() },
+                                ingredients = draft.ingredients.filter { it.name.isNotBlank() },
+                            ),
+                            folder,
+                        )
+                    },
                     enabled = draft.name.isNotBlank(),
                 )
                 ArcaneSecondaryButton("Abbrechen", onCancel)
