@@ -30,13 +30,10 @@ import de.dml.rezeptimporter.ui.theme.arcaneTextFieldColors
 @Composable
 fun PreviewScreen(
     initial: RecipeDraft,
-    folders: List<String>,
-    defaultFolder: String,
-    onSave: (RecipeDraft, String) -> Unit,
+    onSave: (RecipeDraft) -> Unit,
     onCancel: () -> Unit,
 ) {
     var draft by remember { mutableStateOf(initial) }
-    var folder by remember { mutableStateOf(defaultFolder) }
     // Im Preview angelegte Kategorien, die noch keine Zutat enthalten (nur UI-Zustand).
     var extraSections by remember { mutableStateOf(emptyList<String>()) }
 
@@ -285,49 +282,17 @@ fun PreviewScreen(
         }
 
         item {
-            ArcaneCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Speicherort",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    ArcaneTag("[/$folder]")
-                }
-                Spacer(Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    folders.forEach { f ->
-                        FilterChip(
-                            selected = folder == f,
-                            onClick = { folder = f },
-                            label = { Text(f) },
-                            shape = ArcaneShape,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            ),
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ArcanePrimaryButton(
-                    "In Vault speichern",
+                    "Speichern",
                     {
                         // Leer gelassene Schritte/Zutaten fliegen raus — sonst landen leere
-                        // Listenpunkte in der Notiz bzw. scheitert die Schema-Validierung.
+                        // Listenpunkte im Rezept.
                         onSave(
                             draft.copy(
                                 steps = draft.steps.map { it.trim() }.filter { it.isNotEmpty() },
                                 ingredients = draft.ingredients.filter { it.name.isNotBlank() },
                             ),
-                            folder,
                         )
                     },
                     enabled = draft.name.isNotBlank(),

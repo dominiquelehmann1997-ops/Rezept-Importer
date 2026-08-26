@@ -2,17 +2,14 @@ package de.dml.rezeptimporter.settings
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.net.Uri
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-
-enum class Provider { GEMINI, HAIKU }
 
 class AppSettings(context: Context) {
     // Nach einer Deinstallation löscht Android den Master-Key im Keystore. Stellt
     // Auto-Backup danach die alten verschlüsselten Prefs wieder her, scheitert das
     // Entschlüsseln des Keysets (AEADBadTagException) und die App crasht beim Start.
-    // Dann: kaputte Prefs verwerfen und frisch anlegen — Keys/Vault trägt der
+    // Dann: kaputte Prefs verwerfen und frisch anlegen — Adresse/Token trägt der
     // Nutzer einmalig neu ein.
     private val prefs: SharedPreferences = try {
         createPrefs(context)
@@ -30,43 +27,25 @@ class AppSettings(context: Context) {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
 
-    var vaultUri: Uri?
-        get() = prefs.getString("vault_uri", null)?.let(Uri::parse)
-        set(v) = prefs.edit().putString("vault_uri", v?.toString()).apply()
+    /** Basis-URL des Dashboards, ohne Slash am Ende. Zuhause die LAN-Adresse,
+     *  unterwegs der Cloudflare-Hostname. */
+    var dashboardUrl: String
+        get() = prefs.getString("dashboard_url", "")!!
+        set(v) = prefs.edit().putString("dashboard_url", v.trim().trimEnd('/')).apply()
 
-    var provider: Provider
-        get() = Provider.valueOf(prefs.getString("provider", Provider.GEMINI.name)!!)
-        set(v) = prefs.edit().putString("provider", v.name).apply()
+    /** Wert von RECIPE_IMPORT_TOKEN aus web/.env. */
+    var importToken: String
+        get() = prefs.getString("import_token", "")!!
+        set(v) = prefs.edit().putString("import_token", v.trim()).apply()
 
-    var geminiKey: String
-        get() = prefs.getString("gemini_key", "")!!
-        set(v) = prefs.edit().putString("gemini_key", v).apply()
+    /** Cloudflare-Access-Service-Token; leer lassen, wenn direkt ins LAN gefunkt wird. */
+    var cfClientId: String
+        get() = prefs.getString("cf_client_id", "")!!
+        set(v) = prefs.edit().putString("cf_client_id", v.trim()).apply()
 
-    var anthropicKey: String
-        get() = prefs.getString("anthropic_key", "")!!
-        set(v) = prefs.edit().putString("anthropic_key", v).apply()
-
-    /** Standard-Zielordner (relativ zum Vault), in den neue Rezepte geschrieben werden.
-     *  Das Dashboard liest /Dashboard, daher ist das der Default. */
-    var saveFolder: String
-        get() = prefs.getString("save_folder", DEFAULT_FOLDER)!!.ifBlank { DEFAULT_FOLDER }
-        set(v) = prefs.edit().putString("save_folder", v.trim().ifBlank { DEFAULT_FOLDER }).apply()
-
-    /** Auswählbare Zielordner. Reihenfolge bleibt erhalten (newline-getrennt gespeichert).
-     *  "Dashboard" ist immer dabei und wird als erster geführt. */
-    var saveFolders: List<String>
-        get() = prefs.getString("save_folders", null)
-            ?.split("\n")?.map { it.trim() }?.filter { it.isNotEmpty() }
-            ?.let { withDashboardFirst(it) }
-            ?: DEFAULT_FOLDERS
-        set(v) = prefs.edit()
-            .putString("save_folders", withDashboardFirst(v).joinToString("\n"))
-            .apply()
-
-    private fun withDashboardFirst(folders: List<String>): List<String> {
-        val cleaned = folders.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        return (listOf(DEFAULT_FOLDER) + cleaned.filter { it != DEFAULT_FOLDER })
-    }
+    var cfClientSecret: String
+        get() = prefs.getString("cf_client_secret", "")!!
+        set(v) = prefs.edit().putString("cf_client_secret", v.trim()).apply()
 
     /** null = System folgen; sonst expliziter Dark-Mode-Schalter aus den Einstellungen. */
     var darkMode: Boolean?
@@ -77,7 +56,5 @@ class AppSettings(context: Context) {
 
     private companion object {
         const val PREFS_NAME = "rezept_importer_secure"
-        const val DEFAULT_FOLDER = "Dashboard"
-        val DEFAULT_FOLDERS = listOf("Dashboard", "Süßspeisen", "Snacks")
     }
 }

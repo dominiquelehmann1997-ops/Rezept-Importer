@@ -51,7 +51,6 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
@@ -59,8 +58,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.yaml:snakeyaml:2.2")
-    implementation("com.networknt:json-schema-validator:1.5.2")
 
     implementation("com.google.mlkit:text-recognition:16.0.1")
 
@@ -68,10 +65,3 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
-
-// Schema aus shared/ ist die eine Quelle der Wahrheit — vor jedem Build in assets spiegeln.
-val syncSchema by tasks.registering(Copy::class) {
-    from(rootProject.layout.projectDirectory.file("../shared/recipe-vault-frontmatter.schema.json"))
-    into(layout.projectDirectory.dir("src/main/assets"))
-}
-tasks.named("preBuild") { dependsOn(syncSchema) }

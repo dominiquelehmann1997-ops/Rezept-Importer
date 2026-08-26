@@ -10,14 +10,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,13 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import de.dml.rezeptimporter.R
 import de.dml.rezeptimporter.settings.AppSettings
-import de.dml.rezeptimporter.settings.Provider
 import de.dml.rezeptimporter.ui.theme.ArcaneCard
 import de.dml.rezeptimporter.ui.theme.ArcaneCardTitle
 import de.dml.rezeptimporter.ui.theme.ArcaneChip
 import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
 import de.dml.rezeptimporter.ui.theme.ArcaneSecondaryButton
-import de.dml.rezeptimporter.ui.theme.ArcaneShape
 import de.dml.rezeptimporter.ui.theme.ArcaneSlotRow
 import de.dml.rezeptimporter.ui.theme.ArcaneStatBar
 import de.dml.rezeptimporter.ui.theme.ArcaneTag
@@ -51,7 +47,7 @@ private val StartTips = listOf(
     "Cookidoo-Links liefern Zutaten und Nährwerte — die Schritte bleiben im Abo.",
     "YouTube-Rezepte stehen meist in der Videobeschreibung.",
     "Mehrseitige Rezepte: erst alle Seiten fotografieren, dann importieren.",
-    "Jedes Rezept wird eine eigene Markdown-Datei im Vault.",
+    "Jedes importierte Rezept landet direkt in der Rezept-Datenbank des Dashboards.",
     "Instagram ohne Rezept in der Caption: Screenshot der Zutaten teilen.",
 )
 
@@ -102,20 +98,6 @@ class MainActivity : ComponentActivity() {
         photoUris.clear()
     }
 
-    private val pickFolder =
-        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-            if (uri != null) {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                )
-                settings.vaultUri = uri
-                vaultUriState.value = uri.toString()
-            }
-        }
-
-    private val vaultUriState = mutableStateOf("")
-
     /** Synchroner Startfehler: Stacktrace lesbar anzeigen statt stiller Crash. */
     private fun showFatalError(e: Exception) {
         setContentView(ScrollView(this).apply {
@@ -135,7 +117,6 @@ class MainActivity : ComponentActivity() {
             showFatalError(e)
             return
         }
-        vaultUriState.value = settings.vaultUri?.toString() ?: ""
 
         savedInstanceState?.getStringArrayList(KEY_PHOTO_URIS)
             ?.forEach { photoUris.add(Uri.parse(it)) }
@@ -147,18 +128,10 @@ class MainActivity : ComponentActivity() {
             ArcaneTheme(darkOverride = darkMode) {
                 val dark = darkMode ?: isSystemInDarkTheme()
                 var screen by remember { mutableStateOf(Screen.HOME) }
-                var provider by remember { mutableStateOf(settings.provider) }
-                var geminiKey by remember { mutableStateOf(settings.geminiKey) }
-                var anthropicKey by remember { mutableStateOf(settings.anthropicKey) }
-                var saveFolder by remember { mutableStateOf(settings.saveFolder) }
-                var saveFolders by remember { mutableStateOf(settings.saveFolders) }
-                val vaultUri by vaultUriState
-
-                val vaultOk = vaultUri.isNotEmpty()
-                val keyOk = when (provider) {
-                    Provider.GEMINI -> geminiKey.isNotBlank()
-                    Provider.HAIKU -> anthropicKey.isNotBlank()
-                }
+                var dashboardUrl by remember { mutableStateOf(settings.dashboardUrl) }
+                var importToken by remember { mutableStateOf(settings.importToken) }
+                var cfClientId by remember { mutableStateOf(settings.cfClientId) }
+                var cfClientSecret by remember { mutableStateOf(settings.cfClientSecret) }
 
                 Column(
                     Modifier
@@ -207,37 +180,22 @@ class MainActivity : ComponentActivity() {
                     when (screen) {
                         Screen.HOME -> HomeScreen(
                             photoCount = photoUris.size,
-                            vaultOk = vaultOk,
-                            keyOk = keyOk,
+                            dashboardOk = dashboardUrl.isNotBlank(),
+                            tokenOk = importToken.isNotBlank(),
                             onCapture = ::capturePhoto,
                             onImport = ::startImportFromPhotos,
                             onDiscard = { photoUris.clear() },
                             onOpenSettings = { screen = Screen.SETTINGS },
                         )
                         Screen.SETTINGS -> SettingsScreen(
-                            vaultUri = vaultUri,
-                            onPickFolder = { pickFolder.launch(null) },
-                            saveFolder = saveFolder,
-                            saveFolders = saveFolders,
-                            onSelectFolder = { saveFolder = it; settings.saveFolder = it },
-                            onAddFolder = { name ->
-                                settings.saveFolders = saveFolders + name
-                                saveFolders = settings.saveFolders
-                            },
-                            onRemoveFolder = { name ->
-                                settings.saveFolders = saveFolders.filter { it != name }
-                                saveFolders = settings.saveFolders
-                                if (saveFolder == name) {
-                                    settings.saveFolder = "Dashboard"
-                                    saveFolder = settings.saveFolder
-                                }
-                            },
-                            provider = provider,
-                            onProvider = { provider = it; settings.provider = it },
-                            geminiKey = geminiKey,
-                            onGeminiKey = { geminiKey = it; settings.geminiKey = it },
-                            anthropicKey = anthropicKey,
-                            onAnthropicKey = { anthropicKey = it; settings.anthropicKey = it },
+                            dashboardUrl = dashboardUrl,
+                            onDashboardUrl = { dashboardUrl = it; settings.dashboardUrl = it },
+                            importToken = importToken,
+                            onImportToken = { importToken = it; settings.importToken = it },
+                            cfClientId = cfClientId,
+                            onCfClientId = { cfClientId = it; settings.cfClientId = it },
+                            cfClientSecret = cfClientSecret,
+                            onCfClientSecret = { cfClientSecret = it; settings.cfClientSecret = it },
                             dark = dark,
                             onDarkMode = { darkMode = it; settings.darkMode = it },
                         )
@@ -282,16 +240,16 @@ private fun Header(screen: Screen, dark: Boolean, onToggle: () -> Unit) {
 @Composable
 private fun HomeScreen(
     photoCount: Int,
-    vaultOk: Boolean,
-    keyOk: Boolean,
+    dashboardOk: Boolean,
+    tokenOk: Boolean,
     onCapture: () -> Unit,
     onImport: () -> Unit,
     onDiscard: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    // Setup-Check: ohne Vault + Key kein Import.
-    if (!vaultOk || !keyOk) {
-        val done = listOf(vaultOk, keyOk).count { it }
+    // Setup-Check: ohne Dashboard-Adresse + Token kein Import.
+    if (!dashboardOk || !tokenOk) {
+        val done = listOf(dashboardOk, tokenOk).count { it }
         ArcaneCard {
             ArcaneCardTitle(
                 "Setup unvollständig",
@@ -302,8 +260,8 @@ private fun HomeScreen(
             Spacer(Modifier.height(12.dp))
             ArcaneStatBar(done / 2f, color = MaterialTheme.colorScheme.tertiary)
             Spacer(Modifier.height(12.dp))
-            EquipmentRow("Vault-Ordner", vaultOk)
-            EquipmentRow("API-Key für gewählten Provider", keyOk)
+            EquipmentRow("Dashboard", dashboardOk)
+            EquipmentRow("Token", tokenOk)
             Spacer(Modifier.height(16.dp))
             ArcaneSecondaryButton("Zu den Einstellungen", onOpenSettings)
         }
@@ -392,19 +350,14 @@ private fun EquipmentRow(label: String, ok: Boolean) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsScreen(
-    vaultUri: String,
-    onPickFolder: () -> Unit,
-    saveFolder: String,
-    saveFolders: List<String>,
-    onSelectFolder: (String) -> Unit,
-    onAddFolder: (String) -> Unit,
-    onRemoveFolder: (String) -> Unit,
-    provider: Provider,
-    onProvider: (Provider) -> Unit,
-    geminiKey: String,
-    onGeminiKey: (String) -> Unit,
-    anthropicKey: String,
-    onAnthropicKey: (String) -> Unit,
+    dashboardUrl: String,
+    onDashboardUrl: (String) -> Unit,
+    importToken: String,
+    onImportToken: (String) -> Unit,
+    cfClientId: String,
+    onCfClientId: (String) -> Unit,
+    cfClientSecret: String,
+    onCfClientSecret: (String) -> Unit,
     dark: Boolean,
     onDarkMode: (Boolean) -> Unit,
 ) {
@@ -432,139 +385,62 @@ private fun SettingsScreen(
 
     ArcaneCard {
         ArcaneCardTitle(
-            "Vault-Ordner",
-            tag = if (vaultUri.isEmpty()) "[FEHLT]" else "[OK]",
-            tagColor = if (vaultUri.isEmpty()) MaterialTheme.colorScheme.tertiary
+            "Dashboard-Verbindung",
+            tag = if (dashboardUrl.isBlank() || importToken.isBlank()) "[FEHLT]" else "[OK]",
+            tagColor = if (dashboardUrl.isBlank() || importToken.isBlank()) MaterialTheme.colorScheme.tertiary
             else MaterialTheme.colorScheme.secondary,
         )
         Spacer(Modifier.height(8.dp))
-        Text(
-            if (vaultUri.isEmpty()) "— nicht gewählt —" else vaultUri,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(16.dp))
-        ArcaneSecondaryButton("Ordner wählen", onPickFolder)
-    }
-
-    ArcaneCard {
-        ArcaneCardTitle("Speicherordner", tag = "[/$saveFolder]")
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Standard-Zielordner für neue Rezepte. /Dashboard liest das Dashboard aus. " +
-                "Beim Import lässt sich der Ordner pro Rezept umstellen.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(12.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            saveFolders.forEach { f ->
-                FilterChip(
-                    selected = saveFolder == f,
-                    onClick = { onSelectFolder(f) },
-                    label = { Text(f) },
-                    shape = ArcaneShape,
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                    trailingIcon = if (f != "Dashboard") {
-                        {
-                            Icon(
-                                Icons.Filled.Close,
-                                contentDescription = "Ordner entfernen",
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clickable { onRemoveFolder(f) },
-                            )
-                        }
-                    } else null,
-                )
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        var newFolder by remember { mutableStateOf("") }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = newFolder,
-                onValueChange = { newFolder = it },
-                label = { Text("Neuer Ordner") },
-                singleLine = true,
-                colors = arcaneTextFieldColors(),
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            ArcaneSecondaryButton("+ Ordner", {
-                if (newFolder.isNotBlank()) {
-                    onAddFolder(newFolder.trim())
-                    newFolder = ""
-                }
-            })
-        }
-    }
-
-    ArcaneCard {
-        ArcaneCardTitle("LLM-Provider", tag = "[KI]")
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
-                selected = provider == Provider.GEMINI,
-                onClick = { onProvider(Provider.GEMINI) },
-                colors = RadioButtonDefaults.colors(
-                    selectedColor = MaterialTheme.colorScheme.primary,
-                ),
-            )
-            Text("Gemini Flash (Free Tier)", style = MaterialTheme.typography.bodyMedium)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
-                selected = provider == Provider.HAIKU,
-                onClick = { onProvider(Provider.HAIKU) },
-                colors = RadioButtonDefaults.colors(
-                    selectedColor = MaterialTheme.colorScheme.primary,
-                ),
-            )
-            Text("Claude Haiku", style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-
-    ArcaneCard {
-        var showKeys by remember { mutableStateOf(false) }
-        ArcaneCardTitle("API-Keys", tag = "[GEHEIM]")
-        Spacer(Modifier.height(8.dp))
-        val transformation =
-            if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
         OutlinedTextField(
-            value = geminiKey,
-            onValueChange = onGeminiKey,
-            label = { Text("Gemini API-Key") },
+            value = dashboardUrl,
+            onValueChange = onDashboardUrl,
+            label = { Text("Dashboard-Adresse") },
+            placeholder = { Text("https://cockpit.domelehmann.org") },
             singleLine = true,
-            visualTransformation = transformation,
+            colors = arcaneTextFieldColors(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        var showToken by remember { mutableStateOf(false) }
+        val tokenTransformation =
+            if (showToken) VisualTransformation.None else PasswordVisualTransformation()
+        OutlinedTextField(
+            value = importToken,
+            onValueChange = onImportToken,
+            label = { Text("Import-Token") },
+            singleLine = true,
+            visualTransformation = tokenTransformation,
             colors = arcaneTextFieldColors(),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = anthropicKey,
-            onValueChange = onAnthropicKey,
-            label = { Text("Anthropic API-Key") },
+            value = cfClientId,
+            onValueChange = onCfClientId,
+            label = { Text("Cloudflare Client-Id (optional)") },
             singleLine = true,
-            visualTransformation = transformation,
+            colors = arcaneTextFieldColors(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = cfClientSecret,
+            onValueChange = onCfClientSecret,
+            label = { Text("Cloudflare Client-Secret (optional)") },
+            singleLine = true,
+            visualTransformation = tokenTransformation,
             colors = arcaneTextFieldColors(),
             modifier = Modifier.fillMaxWidth(),
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(
-                checked = showKeys,
-                onCheckedChange = { showKeys = it },
+                checked = showToken,
+                onCheckedChange = { showToken = it },
                 colors = CheckboxDefaults.colors(
                     checkedColor = MaterialTheme.colorScheme.primary,
                 ),
             )
-            Text("Keys anzeigen", style = MaterialTheme.typography.bodyMedium)
+            Text("Geheimnisse anzeigen", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

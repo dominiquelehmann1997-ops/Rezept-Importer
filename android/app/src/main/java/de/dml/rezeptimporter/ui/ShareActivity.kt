@@ -24,29 +24,19 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import de.dml.rezeptimporter.R
+import de.dml.rezeptimporter.dashboard.DashboardClient
 import de.dml.rezeptimporter.domain.RecipeDraft
-import de.dml.rezeptimporter.llm.FallbackExtractor
-import de.dml.rezeptimporter.llm.GeminiExtractor
-import de.dml.rezeptimporter.llm.HaikuExtractor
-import de.dml.rezeptimporter.llm.LlmExtractor
+import de.dml.rezeptimporter.link.LinkHosts
 import de.dml.rezeptimporter.link.RecipeLinkResolver
+import de.dml.rezeptimporter.link.extractShareUrl
 import de.dml.rezeptimporter.ocr.OcrTextExtractor
-import de.dml.rezeptimporter.pipeline.ImportPipeline
-import de.dml.rezeptimporter.pipeline.extractShareUrl
 import de.dml.rezeptimporter.settings.AppSettings
-import de.dml.rezeptimporter.settings.Provider
 import de.dml.rezeptimporter.ui.theme.ArcaneCard
 import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
 import de.dml.rezeptimporter.ui.theme.ArcaneTag
 import de.dml.rezeptimporter.ui.theme.ArcaneTheme
-import de.dml.rezeptimporter.validate.RecipeValidator
-import de.dml.rezeptimporter.vault.SafVaultStorage
-import de.dml.rezeptimporter.vault.VaultWriter
-import de.dml.rezeptimporter.yaml.RecipeMarkdownWriter
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import java.io.File
@@ -61,7 +51,7 @@ private val ProgressLines = listOf(
     "Zutaten werden erkannt …",
     "Mengen werden zugeordnet …",
     "Nährwerte werden übernommen …",
-    "Markdown wird erstellt …",
+    "Rezept wird geprüft …",
 )
 
 sealed interface ImportState {
@@ -75,8 +65,6 @@ class ShareActivity : ComponentActivity() {
     private val state = mutableStateOf<ImportState>(ImportState.Working)
     private val showDiscardDialog = mutableStateOf(false)
     private lateinit var settings: AppSettings
-    private lateinit var validator: RecipeValidator
-    private val markdownWriter = RecipeMarkdownWriter()
     private val draftPrefs by lazy { getSharedPreferences("import_draft", MODE_PRIVATE) }
 
     private fun persistDraft(draft: RecipeDraft?) = draftPrefs.edit().apply {
@@ -96,9 +84,6 @@ class ShareActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settings = AppSettings(this)
-        validator = RecipeValidator(
-            assets.open("recipe-vault-frontmatter.schema.json").readBytes().toString(Charsets.UTF_8)
-        )
 
         val restoredDraft = savedInstanceState?.getString(KEY_DRAFT)
             ?.let { runCatching { Json.decodeFromString(RecipeDraft.serializer(), it) }.getOrNull() }
@@ -171,8 +156,6 @@ class ShareActivity : ComponentActivity() {
                         }
                         is ImportState.Preview -> PreviewScreen(
                             initial = s.draft,
-                            folders = settings.saveFolders,
-                            defaultFolder = settings.saveFolder,
                             onSave = ::save,
                             onCancel = { clearPhotoCache(); finish() },
                         )
@@ -228,23 +211,13 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
-    /** Gewählter Provider zuerst; bei Technik-Fehlern (HTTP/Netz) springt der andere ein, falls sein Key da ist. */
-    private fun buildExtractor(): LlmExtractor {
-        val gemini = settings.geminiKey.takeIf { it.isNotBlank() }?.let { GeminiExtractor(it, httpClient) }
-        val haiku = settings.anthropicKey.takeIf { it.isNotBlank() }?.let { HaikuExtractor(it, httpClient) }
-        val (primary, secondary) = when (settings.provider) {
-            Provider.GEMINI -> gemini to haiku
-            Provider.HAIKU -> haiku to gemini
-        }
-        checkNotNull(primary) { "Kein API-Key für den gewählten Provider — in der App unter Settings eintragen" }
-        return if (secondary != null) FallbackExtractor(primary, secondary) else primary
-    }
-
     private fun runImport() {
         lifecycleScope.launch {
             try {
-                if (settings.vaultUri == null) {
-                    state.value = ImportState.Error("Kein Vault-Ordner gewählt — erst App öffnen und Ordner wählen.")
+                if (settings.dashboardUrl.isBlank() || settings.importToken.isBlank()) {
+                    state.value = ImportState.Error(
+                        "Dashboard nicht eingerichtet — erst App öffnen, Adresse und Token eintragen."
+                    )
                     return@launch
                 }
                 val source = collectSourceText()
@@ -252,18 +225,29 @@ class ShareActivity : ComponentActivity() {
                     state.value = ImportState.Error("Kein Text gefunden (OCR leer?). Tipp: Screenshot mit gut lesbarem Text teilen.")
                     return@launch
                 }
-                // Link (auch mit Share-Boilerplate drumherum): erst zu Rezept-Text auflösen
-                // (Web-Portale via JSON-LD, TikTok/Instagram via Caption), dann durch dieselbe
-                // LLM-Pipeline. Schlägt das fehl, landet die LinkResolveException im äußeren
-                // catch als Fehlermeldung.
+                // Link (auch mit Share-Boilerplate drumherum): Instagram/TikTok/YouTube-Caption
+                // holt weiter die App (sie hat den Link aus dem Share-Intent), ein reiner
+                // Web-Link geht roh ans Dashboard, das ihn ohne LLM auflöst.
                 val shareUrl = extractShareUrl(source)
-                val rawText = if (shareUrl != null) {
-                    RecipeLinkResolver(httpClient).resolve(shareUrl)
-                } else {
-                    source
+                val dashboard = DashboardClient(
+                    baseUrl = settings.dashboardUrl,
+                    token = settings.importToken,
+                    cfClientId = settings.cfClientId,
+                    cfClientSecret = settings.cfClientSecret,
+                    client = httpClient,
+                )
+                val socialUrl = shareUrl?.takeIf {
+                    LinkHosts.isSocial(it) || LinkHosts.isYouTube(it)
                 }
-                val pipeline = ImportPipeline(buildExtractor(), validator, markdownWriter)
-                val draft = pipeline.extractValidated(rawText)
+                val draft = when {
+                    // Instagram/TikTok/YouTube: die Caption bzw. Beschreibung holt weiter
+                    // die App — sie hat die Links aus dem Share-Intent.
+                    socialUrl != null ->
+                        dashboard.parse(RecipeLinkResolver(httpClient).resolve(socialUrl), socialUrl)
+                    // Web-Portal: roh ans Dashboard, das löst es ohne LLM aus dem Markup.
+                    shareUrl != null -> dashboard.parse("", shareUrl)
+                    else -> dashboard.parse(source, null)
+                }
                 persistDraft(draft)
                 state.value = ImportState.Preview(draft)
             } catch (e: Exception) {
@@ -294,16 +278,19 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
-    private fun save(draft: RecipeDraft, folder: String) {
+    private fun save(draft: RecipeDraft) {
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    val storage = SafVaultStorage(this@ShareActivity, settings.vaultUri!!, folder)
-                    VaultWriter(storage, markdownWriter, validator).write(draft)
-                }
+                val result = DashboardClient(
+                    baseUrl = settings.dashboardUrl,
+                    token = settings.importToken,
+                    cfClientId = settings.cfClientId,
+                    cfClientSecret = settings.cfClientSecret,
+                    client = httpClient,
+                ).save(draft)
                 Toast.makeText(
                     this@ShareActivity,
-                    "Gespeichert: /$folder/${result.fileName} (id: ${result.id})",
+                    if (result.updated) "Aktualisiert: ${result.name}" else "Gespeichert: ${result.name}",
                     Toast.LENGTH_LONG,
                 ).show()
                 clearPhotoCache()
