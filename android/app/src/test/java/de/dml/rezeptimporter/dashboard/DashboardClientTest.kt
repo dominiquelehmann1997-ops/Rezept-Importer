@@ -1,10 +1,17 @@
 package de.dml.rezeptimporter.dashboard
 
+import de.dml.rezeptimporter.domain.RecipeDraft
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -57,6 +64,92 @@ class DashboardClientTest {
 
         val e = runCatching { client(server).parse("murks", null) }.exceptionOrNull()
         assertTrue(e?.message!!.contains("kein Rezept lesen"))
+        server.shutdown()
+    }
+
+    /** JSON-Body der zuletzt aufgenommenen Anfrage, als "recipe"-Objekt. */
+    private fun MockWebServer.lastRecipeBody(): kotlinx.serialization.json.JsonObject =
+        Json.parseToJsonElement(takeRequest().body.readUtf8()).jsonObject["recipe"]!!.jsonObject
+
+    @Test
+    fun `save schickt Rezept und liest Ergebnis`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"ok":true,"id":"abc","name":"Linsen-Dal","updated":true}"""))
+        server.start()
+
+        val result = client(server).save(RecipeDraft(name = "Linsen-Dal"))
+
+        val request = server.takeRequest()
+        assertEquals("/api/recipes/import", request.path)
+        assertEquals("Bearer geheim", request.getHeader("Authorization"))
+        assertEquals("abc", result.id)
+        assertEquals("Linsen-Dal", result.name)
+        assertTrue(result.updated)
+        server.shutdown()
+    }
+
+    @Test
+    fun `Vegetarisch-Schalter an haengt den Tag an`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"ok":true,"id":"x","name":"x","updated":false}"""))
+        server.start()
+
+        client(server).save(RecipeDraft(name = "Curry", tags = listOf("curry"), vegetarian = true))
+
+        val tags = server.lastRecipeBody()["tags"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("curry", "vegetarisch"), tags)
+        server.shutdown()
+    }
+
+    @Test
+    fun `Vegetarisch-Schalter aus entfernt den Tag, auch bei anderer Gross-Kleinschreibung`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"ok":true,"id":"x","name":"x","updated":false}"""))
+        server.start()
+
+        client(server).save(
+            RecipeDraft(name = "Gulasch", tags = listOf("Vegetarisch", "herzhaft"), vegetarian = false)
+        )
+
+        val tags = server.lastRecipeBody()["tags"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("herzhaft"), tags)
+        server.shutdown()
+    }
+
+    @Test
+    fun `Ohne Cloudflare-Zugangsdaten bleiben die CF-Header weg`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"ok":true,"id":"x","name":"x","updated":false}"""))
+        server.start()
+
+        val lanClient = DashboardClient(
+            baseUrl = server.url("/").toString().trimEnd('/'),
+            token = "geheim",
+            cfClientId = "",
+            cfClientSecret = "",
+            client = OkHttpClient(),
+        )
+        lanClient.save(RecipeDraft(name = "Curry"))
+
+        val request = server.takeRequest()
+        assertNull(request.getHeader("CF-Access-Client-Id"))
+        assertNull(request.getHeader("CF-Access-Client-Secret"))
+        server.shutdown()
+    }
+
+    @Test
+    fun `slug und sourceUrl gehen als slug und source raus`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"ok":true,"id":"x","name":"x","updated":false}"""))
+        server.start()
+
+        client(server).save(
+            RecipeDraft(name = "Dal", slug = "linsen-dal", sourceUrl = "https://example.com/dal")
+        )
+
+        val recipe = server.lastRecipeBody()
+        assertEquals("linsen-dal", recipe["slug"]?.jsonPrimitive?.contentOrNull)
+        assertEquals("https://example.com/dal", recipe["source"]?.jsonPrimitive?.contentOrNull)
         server.shutdown()
     }
 }
