@@ -54,4 +54,11 @@ data class RecipeDraft(
     val slug: String? = null,
     /** Quell-URL, falls der Import von einem Link kam. */
     val sourceUrl: String? = null,
+    /**
+     * Titelbild-URL von der Quellseite (Link-Import); null aus Rohtext-Extraktion.
+     * `@Serializable` und wird persistiert (Preview-Wiederherstellung) — deshalb
+     * Default nötig, sonst bricht das Deserialisieren älterer/fremder Payloads ohne
+     * dieses Feld.
+     */
+    val imageUrl: String? = null,
 )

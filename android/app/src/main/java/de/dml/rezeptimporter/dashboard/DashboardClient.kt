@@ -121,6 +121,7 @@ class DashboardClient(
             vegetarian = tags.any { it.equals(VEGETARIAN_TAG, ignoreCase = true) },
             slug = r["slug"]?.jsonPrimitive?.contentOrNull,
             sourceUrl = r["source"]?.jsonPrimitive?.contentOrNull,
+            imageUrl = r["imageUrl"]?.jsonPrimitive?.contentOrNull,
         )
     }
 
@@ -137,7 +138,7 @@ class DashboardClient(
             (if (draft.vegetarian) rest + VEGETARIAN_TAG else rest).forEach { add(it) }
         }
         put("source", draft.sourceUrl)
-        put("imageUrl", JsonNull)
+        put("imageUrl", draft.imageUrl)
         put("servings", draft.servings)
         put("prepMinutes", draft.prepMinutes)
         put("cookMinutes", draft.cookMinutes)

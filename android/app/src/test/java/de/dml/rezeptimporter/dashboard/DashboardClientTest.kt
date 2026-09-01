@@ -1,5 +1,6 @@
 package de.dml.rezeptimporter.dashboard
 
+import de.dml.rezeptimporter.domain.IngredientDraft
 import de.dml.rezeptimporter.domain.RecipeDraft
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -134,6 +135,51 @@ class DashboardClientTest {
         val request = server.takeRequest()
         assertNull(request.getHeader("CF-Access-Client-Id"))
         assertNull(request.getHeader("CF-Access-Client-Secret"))
+        server.shutdown()
+    }
+
+    @Test
+    fun `imageUrl aus parse ueberlebt den Roundtrip in den save-Body`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"ok":true,"recipe":{"slug":"dal","name":"Linsen-Dal","rating":"ok",
+                   "simple":true,"reheatable":false,"tags":[],"source":null,
+                   "imageUrl":"https://example.com/dal.jpg","servings":null,"prepMinutes":null,
+                   "cookMinutes":null,"ingredients":[{"name":"Linsen"}],"steps":["Kochen."]}}"""
+            )
+        )
+        server.enqueue(MockResponse().setBody("""{"ok":true,"id":"x","name":"x","updated":false}"""))
+        server.start()
+
+        val dashboardClient = client(server)
+        val draft = dashboardClient.parse("roher text", null)
+        assertEquals("https://example.com/dal.jpg", draft.imageUrl)
+
+        server.takeRequest() // Parse-Request verbrauchen, bevor der save-Body gelesen wird
+        dashboardClient.save(draft)
+        val recipe = server.lastRecipeBody()
+        assertEquals("https://example.com/dal.jpg", recipe["imageUrl"]?.jsonPrimitive?.contentOrNull)
+        server.shutdown()
+    }
+
+    @Test
+    fun `Zutaten-Gruppe (section) landet im save-Body`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"ok":true,"id":"x","name":"x","updated":false}"""))
+        server.start()
+
+        client(server).save(
+            RecipeDraft(
+                name = "Dal",
+                ingredients = listOf(
+                    IngredientDraft(name = "Skyr", amount = "150", unit = "g", section = "Dip"),
+                ),
+            )
+        )
+
+        val ingredient = server.lastRecipeBody()["ingredients"]!!.jsonArray[0].jsonObject
+        assertEquals("Dip", ingredient["section"]?.jsonPrimitive?.contentOrNull)
         server.shutdown()
     }
 

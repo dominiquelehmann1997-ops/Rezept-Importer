@@ -2,13 +2,29 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      usesCleartextTraffic: Das Dashboard laeuft im Heimnetz ohne eigenes
+      Zertifikat (z.B. http://192.168.178.91:3001). Seit targetSdk 28 blockiert
+      Android http:// sonst komplett ("CLEARTEXT communication not permitted") —
+      der WLAN-Betrieb waere damit unmoeglich.
+
+      Bewusst pauschal statt per network-security-config: Deren <domain>-Eintraege
+      koennen kein CIDR, ein Heimnetz-Bereich muesste also Adresse fuer Adresse
+      aufgezaehlt werden (~1000 Eintraege pro /24) und waere nach einem
+      Routertausch trotzdem falsch. Die App ist eine privat sideloadbare
+      Debug-Build und spricht genau eine Adresse an, die der Nutzer selbst in den
+      Einstellungen eintraegt; unterwegs laeuft sie ohnehin ueber HTTPS via
+      Cloudflare. Der Gewinn der Aufzaehlung waere theoretisch, die Wartungslast real.
+    -->
     <application
         android:name=".ObsiDineApp"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.RezeptImporter"
-        android:allowBackup="false">
+        android:allowBackup="false"
+
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".ui.MainActivity"

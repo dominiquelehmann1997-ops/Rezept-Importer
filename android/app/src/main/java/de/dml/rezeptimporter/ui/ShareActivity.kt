@@ -64,6 +64,10 @@ class ShareActivity : ComponentActivity() {
 
     private val state = mutableStateOf<ImportState>(ImportState.Working)
     private val showDiscardDialog = mutableStateOf(false)
+    // Fehler beim Speichern (im Unterschied zu ImportState.Error): die Preview mit
+    // den Bearbeitungen bleibt stehen, nur ein Dialog meldet den Fehler — sonst
+    // wären Namens-/Zutaten-Korrekturen nach einem fehlgeschlagenen Save weg.
+    private val saveError = mutableStateOf<String?>(null)
     private lateinit var settings: AppSettings
     private val draftPrefs by lazy { getSharedPreferences("import_draft", MODE_PRIVATE) }
 
@@ -76,9 +80,14 @@ class ShareActivity : ComponentActivity() {
         draftPrefs.getString(KEY_DRAFT_PREFS, null)
             ?.let { runCatching { Json.decodeFromString(RecipeDraft.serializer(), it) }.getOrNull() }
 
-    // LLM-Calls können >10s dauern — OkHttp-Default-Timeouts reichen nicht.
+    // LLM-Calls können >10s dauern, die Extraktion macht bis zu zwei — der Server
+    // begrenzt sie serverseitig auf ~75s (siehe recipeExtract.ts), damit SEINE
+    // Fehlermeldung (401, "keine Rezeptdaten" o.ä.) uns erreicht, statt dass der
+    // Client zuerst aufgibt und nur einen Netzwerkfehler zeigt, obwohl das
+    // Abo-Kontingent schon verbraucht ist. 120s hier ist also eine Obergrenze,
+    // kein Versprechen — ein Cloudflare-Tunnel kappt ohnehin bei ~100s.
     private val httpClient = OkHttpClient.Builder()
-        .callTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(120, TimeUnit.SECONDS)
         .build()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -197,6 +206,16 @@ class ShareActivity : ComponentActivity() {
                             },
                         )
                     }
+                    saveError.value?.let { message ->
+                        AlertDialog(
+                            onDismissRequest = { saveError.value = null },
+                            title = { Text("Speichern fehlgeschlagen") },
+                            text = { Text(message) },
+                            confirmButton = {
+                                TextButton(onClick = { saveError.value = null }) { Text("OK") }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -279,6 +298,11 @@ class ShareActivity : ComponentActivity() {
     }
 
     private fun save(draft: RecipeDraft) {
+        // Sofort die bearbeitete Fassung sichern, nicht erst nach Erfolg: schlägt der
+        // Request fehl (abgelaufener Token, Dashboard offline, Cloudflare-403, ein
+        // ungültiger Slug), wäre sonst beim Wiederöffnen wieder nur der unbearbeitete
+        // Parse-Entwurf da — alle Korrekturen wären weg.
+        persistDraft(draft)
         lifecycleScope.launch {
             try {
                 val result = DashboardClient(
@@ -296,7 +320,10 @@ class ShareActivity : ComponentActivity() {
                 clearPhotoCache()
                 finish()
             } catch (e: Exception) {
-                state.value = ImportState.Error("Speichern fehlgeschlagen: ${e.message}")
+                // Preview bleibt stehen (nicht ImportState.Error): der Nutzer soll den
+                // Namen/die Zutaten korrigieren und erneut speichern können, statt bei
+                // "Schließen" alles zu verlieren.
+                saveError.value = "Speichern fehlgeschlagen: ${e.message}"
             }
         }
     }
