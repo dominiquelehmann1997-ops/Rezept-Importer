@@ -81,13 +81,23 @@ class ShareActivity : ComponentActivity() {
             ?.let { runCatching { Json.decodeFromString(RecipeDraft.serializer(), it) }.getOrNull() }
 
     // LLM-Calls können >10s dauern, die Extraktion macht bis zu zwei — der Server
-    // begrenzt sie serverseitig auf ~75s (siehe recipeExtract.ts), damit SEINE
+    // begrenzt sie serverseitig auf ~90s (siehe recipeExtract.ts), damit SEINE
     // Fehlermeldung (401, "keine Rezeptdaten" o.ä.) uns erreicht, statt dass der
     // Client zuerst aufgibt und nur einen Netzwerkfehler zeigt, obwohl das
     // Abo-Kontingent schon verbraucht ist. 120s hier ist also eine Obergrenze,
     // kein Versprechen — ein Cloudflare-Tunnel kappt ohnehin bei ~100s.
+    //
+    // readTimeout MUSS mitgesetzt werden: callTimeout deckelt nur die Gesamtdauer,
+    // der Default für die einzelne Socket-Lese bleibt sonst bei 10s. /api/recipes/parse
+    // schickt bis zur fertigen Extraktion kein einziges Byte (gemessen: 42s für eine
+    // HelloFresh-Karte) — mit dem Default bricht OkHttp nach 10s mit
+    // SocketTimeoutException("timeout") ab, was in der App als
+    // "Dashboard nicht erreichbar: timeout" landet.
     private val httpClient = OkHttpClient.Builder()
         .callTimeout(120, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     override fun onCreate(savedInstanceState: Bundle?) {
