@@ -1,7 +1,10 @@
 package de.dml.rezeptimporter.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.ScrollView
 import android.widget.TextView
@@ -25,6 +28,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import de.dml.rezeptimporter.R
 import de.dml.rezeptimporter.settings.AppSettings
@@ -69,6 +73,32 @@ class MainActivity : ComponentActivity() {
             if (ok && uri != null) photoUris.add(uri)
             pendingPhotoUri = null
         }
+
+    // Steuert den Hinweis in den Einstellungen, wenn POST_NOTIFICATIONS verweigert
+    // wurde — der Import läuft trotzdem, nur ohne Benachrichtigung am Ende.
+    private val notificationsDenied = mutableStateOf(false)
+
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            notificationsDenied.value = !granted
+        }
+
+    /**
+     * Fragt POST_NOTIFICATIONS an, wenn nötig — bewusst hier beim Öffnen der
+     * Einstellungen statt mitten im Teilen-Ablauf, wo ein Berechtigungsdialog
+     * nur stören würde. Ab Android 13 (Tiramisu) ist das eine Laufzeit-
+     * Berechtigung, davor läuft die Benachrichtigung ohne Abfrage.
+     */
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationsDenied.value = false
+            return
+        }
+        requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
@@ -132,6 +162,12 @@ class MainActivity : ComponentActivity() {
                 var importToken by remember { mutableStateOf(settings.importToken) }
                 var cfClientId by remember { mutableStateOf(settings.cfClientId) }
                 var cfClientSecret by remember { mutableStateOf(settings.cfClientSecret) }
+                // Berechtigung nur beim Öffnen der Einstellungen anfragen, nie mitten
+                // im Teilen-Ablauf (siehe requestNotificationPermissionIfNeeded).
+                val openSettings = {
+                    screen = Screen.SETTINGS
+                    requestNotificationPermissionIfNeeded()
+                }
 
                 Column(
                     Modifier
@@ -146,7 +182,7 @@ class MainActivity : ComponentActivity() {
                         screen = screen,
                         dark = dark,
                         onToggle = {
-                            screen = if (screen == Screen.HOME) Screen.SETTINGS else Screen.HOME
+                            if (screen == Screen.HOME) openSettings() else screen = Screen.HOME
                         },
                     )
                     // Vom Crash-Handler (ObsiDineApp) gespeicherter Stacktrace des
@@ -185,7 +221,7 @@ class MainActivity : ComponentActivity() {
                             onCapture = ::capturePhoto,
                             onImport = ::startImportFromPhotos,
                             onDiscard = { photoUris.clear() },
-                            onOpenSettings = { screen = Screen.SETTINGS },
+                            onOpenSettings = openSettings,
                         )
                         Screen.SETTINGS -> SettingsScreen(
                             dashboardUrl = dashboardUrl,
@@ -198,6 +234,7 @@ class MainActivity : ComponentActivity() {
                             onCfClientSecret = { cfClientSecret = it; settings.cfClientSecret = it },
                             dark = dark,
                             onDarkMode = { darkMode = it; settings.darkMode = it },
+                            notificationsDenied = notificationsDenied.value,
                         )
                     }
                 }
@@ -360,6 +397,7 @@ private fun SettingsScreen(
     onCfClientSecret: (String) -> Unit,
     dark: Boolean,
     onDarkMode: (Boolean) -> Unit,
+    notificationsDenied: Boolean,
 ) {
     ArcaneCard {
         ArcaneCardTitle("Darstellung", tag = if (dark) "[DUNKEL]" else "[HELL]")
@@ -442,5 +480,14 @@ private fun SettingsScreen(
             )
             Text("Geheimnisse anzeigen", style = MaterialTheme.typography.bodyMedium)
         }
+    }
+
+    if (notificationsDenied) {
+        Text(
+            "Ohne Benachrichtigungen läuft der Import trotzdem — das Rezept wartet " +
+                "dann in der App.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

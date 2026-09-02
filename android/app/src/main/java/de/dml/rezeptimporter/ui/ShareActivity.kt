@@ -7,11 +7,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -19,16 +14,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.lifecycleScope
 import de.dml.rezeptimporter.R
 import de.dml.rezeptimporter.dashboard.DashboardClient
-import de.dml.rezeptimporter.dashboard.DashboardException
-import de.dml.rezeptimporter.dashboard.JobResult
 import de.dml.rezeptimporter.dashboard.StartResult
 import de.dml.rezeptimporter.domain.RecipeDraft
+import de.dml.rezeptimporter.draft.DraftStore
 import de.dml.rezeptimporter.link.LinkHosts
 import de.dml.rezeptimporter.link.RecipeLinkResolver
 import de.dml.rezeptimporter.link.extractShareUrl
@@ -38,78 +32,38 @@ import de.dml.rezeptimporter.ui.theme.ArcaneCard
 import de.dml.rezeptimporter.ui.theme.ArcanePrimaryButton
 import de.dml.rezeptimporter.ui.theme.ArcaneTag
 import de.dml.rezeptimporter.ui.theme.ArcaneTheme
-import kotlinx.coroutines.delay
+import de.dml.rezeptimporter.work.ImportStatusWorker
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-/** Rotierende Statuszeilen, damit der LLM-Call (10-30 s) nicht tot wirkt. */
 private const val KEY_DRAFT = "recipe_draft"
+
+/** Schlüssel der alten (vor `DraftStore`) Entwurfs-Persistenz — nur noch für das
+ *  einmalige Aufräumen unten in `onCreate` gebraucht. */
 private const val KEY_DRAFT_PREFS = "draft_json"
 
-private val ProgressLines = listOf(
-    "Text wird gelesen …",
-    "Zutaten werden erkannt …",
-    "Mengen werden zugeordnet …",
-    "Nährwerte werden übernommen …",
-    "Rezept wird geprüft …",
-)
-
-// Vorübergehend, bis der Worker (Task 4) das Pollen übernimmt: die Activity
-// pollt hier noch selbst im Vordergrund weiter wie bisher. Task 5 wirft diese
-// Schleife wieder weg.
-private const val POLL_DELAY_MS = 2_000L
-private const val POLL_DEADLINE_MS = 150_000L
-
-/** Startet den Import und pollt bis Ergebnis — das Zusammenspiel, das früher in `DashboardClient.parse` steckte. */
-private suspend fun startAndPoll(dashboard: DashboardClient, text: String, sourceUrl: String?): RecipeDraft {
-    val start = dashboard.startParse(text, sourceUrl)
-    if (start is StartResult.Immediate) return start.draft
-    val jobId = (start as StartResult.Started).jobId
-    val deadline = System.currentTimeMillis() + POLL_DEADLINE_MS
-    while (true) {
-        when (val result = dashboard.pollJob(jobId)) {
-            is JobResult.Done -> return result.draft
-            is JobResult.Failed -> throw DashboardException(result.message)
-            JobResult.Gone -> throw DashboardException("Import abgelaufen — bitte erneut versuchen.")
-            JobResult.Pending -> Unit
-        }
-        if (System.currentTimeMillis() > deadline) {
-            throw DashboardException("Import dauert zu lange — bitte erneut versuchen.")
-        }
-        delay(POLL_DELAY_MS)
-    }
-}
-
 sealed interface ImportState {
-    /** [seconds]: verstrichene Wartezeit, damit bei einem 71s-Import sichtbar bleibt,
-     * dass noch etwas passiert (statt dass die App tot wirkt). */
-    data class Working(val seconds: Int = 0) : ImportState
     data class Preview(val draft: RecipeDraft) : ImportState
     data class Error(val message: String) : ImportState
 }
 
 class ShareActivity : ComponentActivity() {
 
-    private val state = mutableStateOf<ImportState>(ImportState.Working())
+    // null, solange startImport() noch läuft (kollektiert Text, ruft das Dashboard) —
+    // die eigentliche Wartezeit auf die Extraktion übernimmt jetzt der Worker.
+    private val state = mutableStateOf<ImportState?>(null)
     private val showDiscardDialog = mutableStateOf(false)
     // Fehler beim Speichern (im Unterschied zu ImportState.Error): die Preview mit
     // den Bearbeitungen bleibt stehen, nur ein Dialog meldet den Fehler — sonst
     // wären Namens-/Zutaten-Korrekturen nach einem fehlgeschlagenen Save weg.
     private val saveError = mutableStateOf<String?>(null)
     private lateinit var settings: AppSettings
-    private val draftPrefs by lazy { getSharedPreferences("import_draft", MODE_PRIVATE) }
-
-    private fun persistDraft(draft: RecipeDraft?) = draftPrefs.edit().apply {
-        if (draft == null) remove(KEY_DRAFT_PREFS)
-        else putString(KEY_DRAFT_PREFS, Json.encodeToString(RecipeDraft.serializer(), draft))
-    }.apply()
-
-    private fun loadPersistedDraft(): RecipeDraft? =
-        draftPrefs.getString(KEY_DRAFT_PREFS, null)
-            ?.let { runCatching { Json.decodeFromString(RecipeDraft.serializer(), it) }.getOrNull() }
+    // Job-Id, wenn dieser Aufruf aus der Benachrichtigung kommt — steuert das
+    // Aufräumen in save() (Entwurf aus dem DraftStore, Benachrichtigung wegwischen).
+    private var reviewJobId: String? = null
 
     // LLM-Calls können >10s dauern, die Extraktion macht bis zu zwei — der Server
     // begrenzt sie serverseitig auf ~90s (siehe recipeExtract.ts), damit SEINE
@@ -135,10 +89,26 @@ class ShareActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         settings = AppSettings(this)
 
+        // Alter Schlüssel aus der Zeit vor DraftStore (ersetzt in Task 5) — einmaliges
+        // Aufräumen, damit er nicht für immer ungenutzt in den Prefs liegt. Kann in
+        // einer späteren Version ganz entfernt werden.
+        getSharedPreferences("import_draft", MODE_PRIVATE).edit().remove(KEY_DRAFT_PREFS).apply()
+
         val restoredDraft = savedInstanceState?.getString(KEY_DRAFT)
             ?.let { runCatching { Json.decodeFromString(RecipeDraft.serializer(), it) }.getOrNull() }
-            ?: loadPersistedDraft()
-        if (restoredDraft != null) state.value = ImportState.Preview(restoredDraft)
+
+        val jobId = intent.getStringExtra(EXTRA_JOB_ID)
+        reviewJobId = jobId
+        when {
+            restoredDraft != null -> state.value = ImportState.Preview(restoredDraft)
+            jobId != null -> {
+                // Einstieg aus der Benachrichtigung: Entwurf liegt lokal.
+                val draft = DraftStore(settings.notificationPrefs).get(jobId)
+                state.value = if (draft != null) ImportState.Preview(draft)
+                else ImportState.Error("Import abgelaufen — bitte erneut teilen.")
+            }
+            else -> startImport()
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -156,25 +126,11 @@ class ShareActivity : ComponentActivity() {
                         .safeDrawingPadding(),
                 ) {
                     when (val s = state.value) {
-                        is ImportState.Working -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        // Kein eigener "Working"-Zustand mehr: startImport() übergibt
+                        // schnell an den Worker (kein Warten auf die Extraktion), bis
+                        // dahin genügt ein schlichter Ladehinweis.
+                        null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                             ArcaneCard(Modifier.padding(24.dp)) {
-                                var lineIndex by remember { mutableIntStateOf(0) }
-                                LaunchedEffect(Unit) {
-                                    while (true) {
-                                        delay(2200)
-                                        lineIndex = (lineIndex + 1) % ProgressLines.size
-                                    }
-                                }
-                                // App-Logo pulsiert sanft, solange das LLM arbeitet.
-                                val pulse = rememberInfiniteTransition(label = "pulse")
-                                val scale by pulse.animateFloat(
-                                    initialValue = 0.92f,
-                                    targetValue = 1.06f,
-                                    animationSpec = infiniteRepeatable(
-                                        tween(900), RepeatMode.Reverse,
-                                    ),
-                                    label = "pulseScale",
-                                )
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier.fillMaxWidth(),
@@ -182,7 +138,7 @@ class ShareActivity : ComponentActivity() {
                                     Image(
                                         painterResource(R.drawable.obsididine_logo),
                                         contentDescription = null,
-                                        modifier = Modifier.size(80.dp).scale(scale),
+                                        modifier = Modifier.size(80.dp),
                                     )
                                     Spacer(Modifier.height(16.dp))
                                     LinearProgressIndicator(
@@ -192,22 +148,8 @@ class ShareActivity : ComponentActivity() {
                                     )
                                     Spacer(Modifier.height(16.dp))
                                     Text(
-                                        "Rezept wird extrahiert",
+                                        "Rezept wird übergeben",
                                         style = MaterialTheme.typography.titleMedium,
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        ProgressLines[lineIndex],
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    // Verstrichene Sekunden: bis zu 71s Wartezeit sollen sichtbar
-                                    // bleiben, statt dass die App tot wirkt.
-                                    Text(
-                                        "Rezept wird gelesen… ${s.seconds} s",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
@@ -268,8 +210,6 @@ class ShareActivity : ComponentActivity() {
                 }
             }
         }
-
-        if (restoredDraft == null) runImport()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -279,19 +219,14 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
-    private fun runImport() {
+    /**
+     * Kollektiert den Quelltext, stößt den Import an und übergibt sofort an den
+     * Worker (Task 4) — kein Warten mehr auf die Extraktion im Vordergrund. Der
+     * Nutzer bekommt einen Toast und die Activity schließt sich; das Ergebnis
+     * meldet eine Benachrichtigung.
+     */
+    private fun startImport() {
         lifecycleScope.launch {
-            // Zählt die Wartezeit hoch, solange der Import läuft (bis zu 71s) — sonst
-            // wirkt die App tot. Läuft als eigene Coroutine, damit die Anzeige auch
-            // während des blockierenden Netzwerk-Calls weiterläuft.
-            val ticker = launch {
-                var seconds = 0
-                while (true) {
-                    delay(1_000)
-                    seconds++
-                    state.value = ImportState.Working(seconds)
-                }
-            }
             try {
                 if (settings.dashboardUrl.isBlank() || settings.importToken.isBlank()) {
                     state.value = ImportState.Error(
@@ -301,7 +236,9 @@ class ShareActivity : ComponentActivity() {
                 }
                 val source = collectSourceText()
                 if (source.isBlank()) {
-                    state.value = ImportState.Error("Kein Text gefunden (OCR leer?). Tipp: Screenshot mit gut lesbarem Text teilen.")
+                    state.value = ImportState.Error(
+                        "Kein Text gefunden (OCR leer?). Tipp: Screenshot mit gut lesbarem Text teilen."
+                    )
                     return@launch
                 }
                 // Link (auch mit Share-Boilerplate drumherum): Instagram/TikTok/YouTube-Caption
@@ -315,24 +252,30 @@ class ShareActivity : ComponentActivity() {
                     cfClientSecret = settings.cfClientSecret,
                     client = httpClient,
                 )
-                val socialUrl = shareUrl?.takeIf {
-                    LinkHosts.isSocial(it) || LinkHosts.isYouTube(it)
-                }
-                val draft = when {
-                    // Instagram/TikTok/YouTube: die Caption bzw. Beschreibung holt weiter
-                    // die App — sie hat die Links aus dem Share-Intent.
+                val socialUrl = shareUrl?.takeIf { LinkHosts.isSocial(it) || LinkHosts.isYouTube(it) }
+                val start = when {
                     socialUrl != null ->
-                        startAndPoll(dashboard, RecipeLinkResolver(httpClient).resolve(socialUrl), socialUrl)
-                    // Web-Portal: roh ans Dashboard, das löst es ohne LLM aus dem Markup.
-                    shareUrl != null -> startAndPoll(dashboard, "", shareUrl)
-                    else -> startAndPoll(dashboard, source, null)
+                        dashboard.startParse(RecipeLinkResolver(httpClient).resolve(socialUrl), socialUrl)
+                    shareUrl != null -> dashboard.startParse("", shareUrl)
+                    else -> dashboard.startParse(source, null)
                 }
-                persistDraft(draft)
-                state.value = ImportState.Preview(draft)
+
+                when (start) {
+                    is StartResult.Started -> {
+                        ImportStatusWorker.enqueue(this@ShareActivity, start.jobId, settings)
+                        DraftStore(settings.notificationPrefs).sweep()
+                        Toast.makeText(
+                            this@ShareActivity,
+                            "An Cockpit übergeben — Benachrichtigung folgt",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        finish()
+                    }
+                    // Alter Server: Rezept ist schon da, direkt in die Vorschau.
+                    is StartResult.Immediate -> state.value = ImportState.Preview(start.draft)
+                }
             } catch (e: Exception) {
-                state.value = ImportState.Error(e.message ?: "Unbekannter Fehler")
-            } finally {
-                ticker.cancel()
+                state.value = ImportState.Error(e.message ?: "Import fehlgeschlagen.")
             }
         }
     }
@@ -360,11 +303,6 @@ class ShareActivity : ComponentActivity() {
     }
 
     private fun save(draft: RecipeDraft) {
-        // Sofort die bearbeitete Fassung sichern, nicht erst nach Erfolg: schlägt der
-        // Request fehl (abgelaufener Token, Dashboard offline, Cloudflare-403, ein
-        // ungültiger Slug), wäre sonst beim Wiederöffnen wieder nur der unbearbeitete
-        // Parse-Entwurf da — alle Korrekturen wären weg.
-        persistDraft(draft)
         lifecycleScope.launch {
             try {
                 val result = DashboardClient(
@@ -374,6 +312,10 @@ class ShareActivity : ComponentActivity() {
                     cfClientSecret = settings.cfClientSecret,
                     client = httpClient,
                 ).save(draft)
+                reviewJobId?.let {
+                    DraftStore(settings.notificationPrefs).remove(it)
+                    NotificationManagerCompat.from(this@ShareActivity).cancel(it.hashCode())
+                }
                 Toast.makeText(
                     this@ShareActivity,
                     if (result.updated) "Aktualisiert: ${result.name}" else "Gespeichert: ${result.name}",
@@ -392,7 +334,6 @@ class ShareActivity : ComponentActivity() {
 
     /** In-App aufgenommene Fotos (cache/fotos/) nach dem Import aufräumen. */
     private fun clearPhotoCache() {
-        persistDraft(null)
         File(cacheDir, "fotos").listFiles()?.forEach { it.delete() }
     }
 
