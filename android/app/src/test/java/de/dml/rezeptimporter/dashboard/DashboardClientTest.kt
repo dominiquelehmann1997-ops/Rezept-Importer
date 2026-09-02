@@ -77,6 +77,26 @@ class DashboardClientTest {
     }
 
     @Test
+    fun `parse nimmt ein Rezept direkt aus der Startantwort, wenn jobId fehlt`() = runBlocking {
+        // Server ohne asynchronen Modus: ignoriert `async`, antwortet nach dem
+        // vollen Import direkt mit 200 {"ok":true,"recipe":{...}}. Reihenfolge-
+        // unabhaengig heisst hier: das Rezept sofort nehmen, nicht pollen.
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setBody(
+                """{"ok":true,"recipe":{"name":"Dal","steps":["kochen"],"ingredients":[]}}"""
+            )
+        )
+        server.start()
+
+        val draft = client(server).parse("roher text", null)
+
+        assertEquals("Dal", draft.name)
+        assertEquals(1, server.requestCount) // kein Poll-Request hinterher
+        server.shutdown()
+    }
+
+    @Test
     fun `parse macht aus einem Job-Fehler eine DashboardException`() = runBlocking {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(202).setBody("""{"ok":true,"jobId":"j1"}"""))

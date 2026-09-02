@@ -52,7 +52,15 @@ class DashboardClient(
             put("async", true)
         })
         val jobId = start["jobId"]?.jsonPrimitive?.contentOrNull
-            ?: throw DashboardException("Antwort ohne Job-Id")
+        if (jobId == null) {
+            // Server ohne asynchronen Modus: ignoriert `async` und liefert das Rezept
+            // direkt in der Startantwort. Reihenfolgeunabhängig behandeln, statt hart
+            // auf `jobId` zu bestehen — sonst verbrennt jeder Rollback/misslungene
+            // Server-Deploy nach einer APK-Installation ein Abo-Kontingent für nichts.
+            val recipe = start["recipe"]?.jsonObject
+                ?: throw DashboardException("Antwort ohne Job-Id")
+            return@withContext toDraft(recipe)
+        }
 
         val deadline = System.currentTimeMillis() + MAX_POLL_MS
         while (true) {
