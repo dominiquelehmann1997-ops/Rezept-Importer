@@ -13,7 +13,7 @@ class ImportOutcomeTest {
     fun `fertig meldet den Namen und legt den Entwurf ab`() {
         assertEquals(
             ImportOutcome.Done(draft),
-            outcomeOf(JobResult.Done(draft), abgelaufen = false),
+            outcomeOf(JobResult.Done(draft), expired = false),
         )
     }
 
@@ -21,22 +21,22 @@ class ImportOutcomeTest {
     fun `fehler reicht die Servermeldung durch`() {
         assertEquals(
             ImportOutcome.Failed("kein Rezept"),
-            outcomeOf(JobResult.Failed("kein Rezept"), abgelaufen = false),
+            outcomeOf(JobResult.Failed("kein Rezept"), expired = false),
         )
     }
 
     @Test
     fun `weggefallener Job ist unklar`() {
-        assertEquals(ImportOutcome.Unclear, outcomeOf(JobResult.Gone, abgelaufen = false))
+        assertEquals(ImportOutcome.Unclear, outcomeOf(JobResult.Gone, expired = false))
     }
 
     @Test
     fun `pending bleibt offen, solange Zeit ist`() {
-        assertEquals(ImportOutcome.KeepWaiting, outcomeOf(JobResult.Pending, abgelaufen = false))
+        assertEquals(ImportOutcome.KeepWaiting, outcomeOf(JobResult.Pending, expired = false))
     }
 
     @Test
     fun `pending wird unklar, wenn die Zeit um ist`() {
-        assertEquals(ImportOutcome.Unclear, outcomeOf(JobResult.Pending, abgelaufen = true))
+        assertEquals(ImportOutcome.Unclear, outcomeOf(JobResult.Pending, expired = true))
     }
 }

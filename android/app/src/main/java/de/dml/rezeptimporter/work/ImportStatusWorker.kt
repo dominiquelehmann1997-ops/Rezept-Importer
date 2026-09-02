@@ -28,11 +28,11 @@ sealed interface ImportOutcome {
 }
 
 /** Reine Entscheidung, getrennt vom Worker, damit sie ohne Android testbar ist. */
-fun outcomeOf(job: JobResult, abgelaufen: Boolean): ImportOutcome = when (job) {
+fun outcomeOf(job: JobResult, expired: Boolean): ImportOutcome = when (job) {
     is JobResult.Done -> ImportOutcome.Done(job.draft)
     is JobResult.Failed -> ImportOutcome.Failed(job.message)
     JobResult.Gone -> ImportOutcome.Unclear
-    JobResult.Pending -> if (abgelaufen) ImportOutcome.Unclear else ImportOutcome.KeepWaiting
+    JobResult.Pending -> if (expired) ImportOutcome.Unclear else ImportOutcome.KeepWaiting
 }
 
 private const val POLL_INTERVAL_MS = 5_000L
@@ -64,7 +64,7 @@ class ImportStatusWorker(
             // darf den Import nicht abschießen — der Job läuft serverseitig weiter.
             val job = runCatching { client.pollJob(jobId) }.getOrDefault(JobResult.Pending)
 
-            when (val outcome = outcomeOf(job, abgelaufen = System.currentTimeMillis() > deadline)) {
+            when (val outcome = outcomeOf(job, expired = System.currentTimeMillis() > deadline)) {
                 is ImportOutcome.Done -> {
                     // Erst ablegen, dann melden: danach ist die Benachrichtigung
                     // unabhängig davon, ob der Job auf dem Server noch existiert.
