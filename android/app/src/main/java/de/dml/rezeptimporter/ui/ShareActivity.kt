@@ -395,4 +395,9 @@ class ShareActivity : ComponentActivity() {
         persistDraft(null)
         File(cacheDir, "fotos").listFiles()?.forEach { it.delete() }
     }
+
+    companion object {
+        /** Job-Id im Intent, mit dem die Benachrichtigung die Activity wieder öffnet. */
+        const val EXTRA_JOB_ID = "job_id"
+    }
 }

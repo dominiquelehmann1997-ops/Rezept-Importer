@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-class AppSettings(context: Context) {
+class AppSettings(private val context: Context) {
     // Nach einer Deinstallation löscht Android den Master-Key im Keystore. Stellt
     // Auto-Backup danach die alten verschlüsselten Prefs wieder her, scheitert das
     // Entschlüsseln des Keysets (AEADBadTagException) und die App crasht beim Start.
@@ -53,6 +53,16 @@ class AppSettings(context: Context) {
         set(v) = prefs.edit().apply {
             if (v == null) remove("dark_mode") else putBoolean("dark_mode", v)
         }.apply()
+
+    /**
+     * Ablage der Import-Entwürfe. Bewusst nicht verschlüsselt: Rezepte sind kein
+     * Geheimnis. Eigene Datei "import_drafts" (Plural) statt der von `ShareActivity`
+     * genutzten "import_draft": deren Legacy-Schlüssel "draft_json" beginnt mit dem
+     * Präfix "draft_", das `DraftStore.sweep()` durchkämmt — in derselben Datei
+     * würde ein ungesicherter Alt-Entwurf des Nutzers stillschweigend mit gefegt.
+     */
+    val notificationPrefs: SharedPreferences
+        get() = context.getSharedPreferences("import_drafts", Context.MODE_PRIVATE)
 
     private companion object {
         const val PREFS_NAME = "rezept_importer_secure"
