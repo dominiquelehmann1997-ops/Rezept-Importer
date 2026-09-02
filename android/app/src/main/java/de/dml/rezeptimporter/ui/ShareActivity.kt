@@ -55,14 +55,16 @@ private val ProgressLines = listOf(
 )
 
 sealed interface ImportState {
-    data object Working : ImportState
+    /** [seconds]: verstrichene Wartezeit, damit bei einem 71s-Import sichtbar bleibt,
+     * dass noch etwas passiert (statt dass die App tot wirkt). */
+    data class Working(val seconds: Int = 0) : ImportState
     data class Preview(val draft: RecipeDraft) : ImportState
     data class Error(val message: String) : ImportState
 }
 
 class ShareActivity : ComponentActivity() {
 
-    private val state = mutableStateOf<ImportState>(ImportState.Working)
+    private val state = mutableStateOf<ImportState>(ImportState.Working())
     private val showDiscardDialog = mutableStateOf(false)
     // Fehler beim Speichern (im Unterschied zu ImportState.Error): die Preview mit
     // den Bearbeitungen bleibt stehen, nur ein Dialog meldet den Fehler — sonst
@@ -170,6 +172,14 @@ class ShareActivity : ComponentActivity() {
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                    Spacer(Modifier.height(4.dp))
+                                    // Verstrichene Sekunden: bis zu 71s Wartezeit sollen sichtbar
+                                    // bleiben, statt dass die App tot wirkt.
+                                    Text(
+                                        "Rezept wird gelesen… ${s.seconds} s",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
                         }
@@ -242,6 +252,17 @@ class ShareActivity : ComponentActivity() {
 
     private fun runImport() {
         lifecycleScope.launch {
+            // Zählt die Wartezeit hoch, solange der Import läuft (bis zu 71s) — sonst
+            // wirkt die App tot. Läuft als eigene Coroutine, damit die Anzeige auch
+            // während des blockierenden Netzwerk-Calls weiterläuft.
+            val ticker = launch {
+                var seconds = 0
+                while (true) {
+                    delay(1_000)
+                    seconds++
+                    state.value = ImportState.Working(seconds)
+                }
+            }
             try {
                 if (settings.dashboardUrl.isBlank() || settings.importToken.isBlank()) {
                     state.value = ImportState.Error(
@@ -281,6 +302,8 @@ class ShareActivity : ComponentActivity() {
                 state.value = ImportState.Preview(draft)
             } catch (e: Exception) {
                 state.value = ImportState.Error(e.message ?: "Unbekannter Fehler")
+            } finally {
+                ticker.cancel()
             }
         }
     }

@@ -24,14 +24,16 @@ class DashboardClientTest {
         cfClientId = "cf-id",
         cfClientSecret = "cf-secret",
         client = OkHttpClient(),
+        pollDelayMs = 0,
     )
 
     @Test
     fun `parse schickt Text und Header, liest Rezept`() = runBlocking {
         val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(202).setBody("""{"ok":true,"jobId":"j1"}"""))
         server.enqueue(
             MockResponse().setBody(
-                """{"ok":true,"recipe":{"slug":"dal","name":"Linsen-Dal","rating":"ok",
+                """{"ok":true,"status":"done","recipe":{"slug":"dal","name":"Linsen-Dal","rating":"ok",
                    "simple":true,"reheatable":false,"tags":["vegetarisch"],"source":null,
                    "imageUrl":null,"servings":4,"prepMinutes":10,"cookMinutes":25,
                    "kcal":420,"protein":18,"carbs":55,"fat":9,
@@ -51,6 +53,39 @@ class DashboardClientTest {
         assertEquals("Linsen-Dal", draft.name)
         assertEquals(4, draft.servings)
         assertEquals(55, draft.nutrition?.carbs?.toInt())
+        server.shutdown()
+    }
+
+    @Test
+    fun `parse startet einen Job und pollt bis done`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(202).setBody("""{"ok":true,"jobId":"j1"}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true,"status":"pending"}"""))
+        server.enqueue(
+            MockResponse().setBody("""{"ok":true,"status":"done","recipe":{"name":"Dal","steps":["kochen"],"ingredients":[]}}""")
+        )
+        server.start()
+
+        val draft = client(server).parse("roher text", null)
+
+        assertEquals("Dal", draft.name)
+        val start = server.takeRequest()
+        assertEquals("POST", start.method)
+        assertTrue(start.body.readUtf8().contains("\"async\":true"))
+        assertTrue(server.takeRequest().path!!.contains("job=j1"))
+        server.shutdown()
+    }
+
+    @Test
+    fun `parse macht aus einem Job-Fehler eine DashboardException`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(202).setBody("""{"ok":true,"jobId":"j1"}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true,"status":"error","error":"kein Rezept"}"""))
+        server.start()
+
+        val e = runCatching { client(server).parse("x", null) }.exceptionOrNull()
+        assertTrue(e is DashboardException)
+        assertTrue(e?.message!!.contains("kein Rezept"))
         server.shutdown()
     }
 
@@ -141,9 +176,10 @@ class DashboardClientTest {
     @Test
     fun `imageUrl aus parse ueberlebt den Roundtrip in den save-Body`() = runBlocking {
         val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(202).setBody("""{"ok":true,"jobId":"j1"}"""))
         server.enqueue(
             MockResponse().setBody(
-                """{"ok":true,"recipe":{"slug":"dal","name":"Linsen-Dal","rating":"ok",
+                """{"ok":true,"status":"done","recipe":{"slug":"dal","name":"Linsen-Dal","rating":"ok",
                    "simple":true,"reheatable":false,"tags":[],"source":null,
                    "imageUrl":"https://example.com/dal.jpg","servings":null,"prepMinutes":null,
                    "cookMinutes":null,"ingredients":[{"name":"Linsen"}],"steps":["Kochen."]}}"""
@@ -156,7 +192,8 @@ class DashboardClientTest {
         val draft = dashboardClient.parse("roher text", null)
         assertEquals("https://example.com/dal.jpg", draft.imageUrl)
 
-        server.takeRequest() // Parse-Request verbrauchen, bevor der save-Body gelesen wird
+        server.takeRequest() // Start-Request (POST) verbrauchen
+        server.takeRequest() // Poll-Request (GET) verbrauchen, bevor der save-Body gelesen wird
         dashboardClient.save(draft)
         val recipe = server.lastRecipeBody()
         assertEquals("https://example.com/dal.jpg", recipe["imageUrl"]?.jsonPrimitive?.contentOrNull)

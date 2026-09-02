@@ -4,6 +4,7 @@ import de.dml.rezeptimporter.domain.IngredientDraft
 import de.dml.rezeptimporter.domain.NutritionDraft
 import de.dml.rezeptimporter.domain.RecipeDraft
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -19,6 +20,11 @@ data class SaveResult(val id: String, val name: String, val updated: Boolean)
 
 private const val VEGETARIAN_TAG = "vegetarisch"
 
+// Der Import läuft serverseitig als Job (siehe Task 7): die App startet ihn und
+// pollt den Status, statt an einer einzigen HTTP-Verbindung bis zu 71s zu hängen —
+// gefährlich nah am ~100s-Limit der Cloudflare-Edge.
+private const val MAX_POLL_MS = 150_000L
+
 /**
  * Client für die beiden Import-Endpunkte des Haushalts-Dashboards. Die App
  * extrahiert nicht mehr selbst: `parse` schickt Rohtext (OCR, Caption) oder
@@ -31,16 +37,35 @@ class DashboardClient(
     private val cfClientId: String,
     private val cfClientSecret: String,
     private val client: OkHttpClient,
+    private val pollDelayMs: Long = 2_000,
 ) {
 
     suspend fun parse(text: String, sourceUrl: String?): RecipeDraft = withContext(Dispatchers.IO) {
-        val body = buildJsonObject {
+        val start = post("/api/recipes/parse", buildJsonObject {
             put("text", text)
             put("sourceUrl", sourceUrl)
+            put("async", true)
+        })
+        val jobId = start["jobId"]?.jsonPrimitive?.contentOrNull
+            ?: throw DashboardException("Antwort ohne Job-Id")
+
+        val deadline = System.currentTimeMillis() + MAX_POLL_MS
+        while (true) {
+            val job = get("/api/recipes/parse?job=$jobId")
+            when (job["status"]?.jsonPrimitive?.contentOrNull) {
+                "done" -> return@withContext toDraft(
+                    job["recipe"]?.jsonObject ?: throw DashboardException("Antwort ohne Rezept")
+                )
+                "error" -> throw DashboardException(
+                    job["error"]?.jsonPrimitive?.contentOrNull ?: "Import fehlgeschlagen."
+                )
+            }
+            if (System.currentTimeMillis() > deadline) {
+                throw DashboardException("Import dauert zu lange — bitte erneut versuchen.")
+            }
+            delay(pollDelayMs)
         }
-        val recipe = post("/api/recipes/parse", body)["recipe"]?.jsonObject
-            ?: throw DashboardException("Antwort ohne Rezept")
-        toDraft(recipe)
+        @Suppress("UNREACHABLE_CODE") throw DashboardException("unerreichbar")
     }
 
     suspend fun save(draft: RecipeDraft): SaveResult = withContext(Dispatchers.IO) {
@@ -54,11 +79,22 @@ class DashboardClient(
 
     // ---- HTTP ----
 
-    private fun post(path: String, body: JsonObject): JsonObject {
-        val builder = Request.Builder()
-            .url("$baseUrl$path")
-            .header("Authorization", "Bearer $token")
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
+    private fun post(path: String, body: JsonObject): JsonObject =
+        execute(
+            Request.Builder()
+                .url("$baseUrl$path")
+                .post(body.toString().toRequestBody("application/json".toMediaType()))
+        )
+
+    private fun get(path: String): JsonObject =
+        execute(Request.Builder().url("$baseUrl$path"))
+
+    /**
+     * Gemeinsame HTTP-Logik für `post`/`get`: setzt Bearer- und Cloudflare-Access-
+     * Header, schickt die Anfrage ab und wertet Fehler/JSON einheitlich aus.
+     */
+    private fun execute(builder: Request.Builder): JsonObject {
+        builder.header("Authorization", "Bearer $token")
         // Im Heimnetz (http://192.168.178.91:3001) steht kein Cloudflare Access
         // davor — dann bleiben die Felder leer und die Header entfallen.
         if (cfClientId.isNotBlank() && cfClientSecret.isNotBlank()) {
