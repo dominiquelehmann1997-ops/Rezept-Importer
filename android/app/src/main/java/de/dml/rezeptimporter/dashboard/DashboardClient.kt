@@ -4,7 +4,6 @@ import de.dml.rezeptimporter.domain.IngredientDraft
 import de.dml.rezeptimporter.domain.NutritionDraft
 import de.dml.rezeptimporter.domain.RecipeDraft
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -14,9 +13,27 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import kotlin.math.roundToInt
 
-class DashboardException(message: String, cause: Throwable? = null) : Exception(message, cause)
+class DashboardException(
+    message: String,
+    cause: Throwable? = null,
+    val statusCode: Int? = null,
+) : Exception(message, cause)
 
 data class SaveResult(val id: String, val name: String, val updated: Boolean)
+
+/** Ergebnis des Job-Starts. `Immediate` deckt Server ohne asynchronen Modus ab. */
+sealed interface StartResult {
+    data class Started(val jobId: String) : StartResult
+    data class Immediate(val draft: RecipeDraft) : StartResult
+}
+
+/** Stand eines laufenden Imports — eine Momentaufnahme, kein Warten. */
+sealed interface JobResult {
+    data object Pending : JobResult
+    data class Done(val draft: RecipeDraft) : JobResult
+    data class Failed(val message: String) : JobResult
+    data object Gone : JobResult
+}
 
 private const val VEGETARIAN_TAG = "vegetarisch"
 
@@ -25,16 +42,12 @@ private val CATEGORIES = listOf("hauptmahlzeit", "snack", "suesses")
 private fun normalizeCategory(raw: String?): String =
     if (raw in CATEGORIES) raw!! else "hauptmahlzeit"
 
-// Der Import läuft serverseitig als Job (siehe Task 7): die App startet ihn und
-// pollt den Status, statt an einer einzigen HTTP-Verbindung bis zu 71s zu hängen —
-// gefährlich nah am ~100s-Limit der Cloudflare-Edge.
-private const val MAX_POLL_MS = 150_000L
-
 /**
  * Client für die beiden Import-Endpunkte des Haushalts-Dashboards. Die App
- * extrahiert nicht mehr selbst: `parse` schickt Rohtext (OCR, Caption) oder
- * eine Quell-URL hin und bekommt den fertigen Entwurf zurück, `save` schreibt
- * den — nach der Bearbeitung im Preview — in die Rezept-DB.
+ * extrahiert nicht mehr selbst: `startParse` schickt Rohtext (OCR, Caption) oder
+ * eine Quell-URL hin und stößt die Extraktion an, `pollJob` liefert einen
+ * einzelnen Blick auf deren Fortschritt, `save` schreibt den fertigen Entwurf
+ * — nach der Bearbeitung im Preview — in die Rezept-DB.
  */
 class DashboardClient(
     private val baseUrl: String,
@@ -42,43 +55,47 @@ class DashboardClient(
     private val cfClientId: String,
     private val cfClientSecret: String,
     private val client: OkHttpClient,
-    private val pollDelayMs: Long = 2_000,
 ) {
 
-    suspend fun parse(text: String, sourceUrl: String?): RecipeDraft = withContext(Dispatchers.IO) {
-        val start = post("/api/recipes/parse", buildJsonObject {
-            put("text", text)
-            put("sourceUrl", sourceUrl)
-            put("async", true)
-        })
-        val jobId = start["jobId"]?.jsonPrimitive?.contentOrNull
-        if (jobId == null) {
-            // Server ohne asynchronen Modus: ignoriert `async` und liefert das Rezept
-            // direkt in der Startantwort. Reihenfolgeunabhängig behandeln, statt hart
-            // auf `jobId` zu bestehen — sonst verbrennt jeder Rollback/misslungene
-            // Server-Deploy nach einer APK-Installation ein Abo-Kontingent für nichts.
+    /** Startet die Extraktion. Das Warten übernimmt der Worker, nicht der Client. */
+    suspend fun startParse(text: String, sourceUrl: String?): StartResult =
+        withContext(Dispatchers.IO) {
+            val start = post("/api/recipes/parse", buildJsonObject {
+                put("text", text)
+                put("sourceUrl", sourceUrl)
+                put("async", true)
+            })
+            start["jobId"]?.jsonPrimitive?.contentOrNull?.let {
+                return@withContext StartResult.Started(it)
+            }
+            // Server ohne asynchronen Modus: liefert das Rezept direkt. Nicht
+            // wegkürzen — sonst verbrennt jeder Rollback nach einer
+            // APK-Installation ein Abo-Kontingent für nichts.
             val recipe = start["recipe"]?.jsonObject
                 ?: throw DashboardException("Antwort ohne Job-Id")
-            return@withContext toDraft(recipe)
+            StartResult.Immediate(toDraft(recipe))
         }
 
-        val deadline = System.currentTimeMillis() + MAX_POLL_MS
-        while (true) {
-            val job = get("/api/recipes/parse?job=$jobId")
-            when (job["status"]?.jsonPrimitive?.contentOrNull) {
-                "done" -> return@withContext toDraft(
-                    job["recipe"]?.jsonObject ?: throw DashboardException("Antwort ohne Rezept")
-                )
-                "error" -> throw DashboardException(
-                    job["error"]?.jsonPrimitive?.contentOrNull ?: "Import fehlgeschlagen."
-                )
-            }
-            if (System.currentTimeMillis() > deadline) {
-                throw DashboardException("Import dauert zu lange — bitte erneut versuchen.")
-            }
-            delay(pollDelayMs)
+    /** Ein einzelner Blick auf den Job. Wiederholen ist Sache des Aufrufers. */
+    suspend fun pollJob(jobId: String): JobResult = withContext(Dispatchers.IO) {
+        val job = try {
+            get("/api/recipes/parse?job=$jobId")
+        } catch (e: DashboardException) {
+            // Der Server meldet einen abgelaufenen Job als 404, und `execute`
+            // reicht den Statuscode durch. Hier ist das kein Fehler, sondern ein
+            // Zustand.
+            if (e.statusCode == 404) return@withContext JobResult.Gone
+            throw e
         }
-        @Suppress("UNREACHABLE_CODE") throw DashboardException("unerreichbar")
+        when (job["status"]?.jsonPrimitive?.contentOrNull) {
+            "done" -> JobResult.Done(
+                toDraft(job["recipe"]?.jsonObject ?: throw DashboardException("Antwort ohne Rezept"))
+            )
+            "error" -> JobResult.Failed(
+                job["error"]?.jsonPrimitive?.contentOrNull ?: "Import fehlgeschlagen."
+            )
+            else -> JobResult.Pending
+        }
     }
 
     suspend fun save(draft: RecipeDraft): SaveResult = withContext(Dispatchers.IO) {
@@ -123,7 +140,8 @@ class DashboardClient(
                     val message = json?.get("error")?.jsonPrimitive?.contentOrNull
                     // Access schickt bei falschem Service-Token HTML, kein JSON.
                     throw DashboardException(
-                        message ?: "Dashboard HTTP ${resp.code}: ${text.take(200)}"
+                        message ?: "Dashboard HTTP ${resp.code}: ${text.take(200)}",
+                        statusCode = resp.code,
                     )
                 }
                 json ?: throw DashboardException("Dashboard-Antwort ist kein JSON")

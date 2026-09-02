@@ -25,6 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import de.dml.rezeptimporter.R
 import de.dml.rezeptimporter.dashboard.DashboardClient
+import de.dml.rezeptimporter.dashboard.DashboardException
+import de.dml.rezeptimporter.dashboard.JobResult
+import de.dml.rezeptimporter.dashboard.StartResult
 import de.dml.rezeptimporter.domain.RecipeDraft
 import de.dml.rezeptimporter.link.LinkHosts
 import de.dml.rezeptimporter.link.RecipeLinkResolver
@@ -53,6 +56,32 @@ private val ProgressLines = listOf(
     "Nährwerte werden übernommen …",
     "Rezept wird geprüft …",
 )
+
+// Vorübergehend, bis der Worker (Task 4) das Pollen übernimmt: die Activity
+// pollt hier noch selbst im Vordergrund weiter wie bisher. Task 5 wirft diese
+// Schleife wieder weg.
+private const val POLL_DELAY_MS = 2_000L
+private const val POLL_DEADLINE_MS = 150_000L
+
+/** Startet den Import und pollt bis Ergebnis — das Zusammenspiel, das früher in `DashboardClient.parse` steckte. */
+private suspend fun startAndPoll(dashboard: DashboardClient, text: String, sourceUrl: String?): RecipeDraft {
+    val start = dashboard.startParse(text, sourceUrl)
+    if (start is StartResult.Immediate) return start.draft
+    val jobId = (start as StartResult.Started).jobId
+    val deadline = System.currentTimeMillis() + POLL_DEADLINE_MS
+    while (true) {
+        when (val result = dashboard.pollJob(jobId)) {
+            is JobResult.Done -> return result.draft
+            is JobResult.Failed -> throw DashboardException(result.message)
+            JobResult.Gone -> throw DashboardException("Import abgelaufen — bitte erneut versuchen.")
+            JobResult.Pending -> Unit
+        }
+        if (System.currentTimeMillis() > deadline) {
+            throw DashboardException("Import dauert zu lange — bitte erneut versuchen.")
+        }
+        delay(POLL_DELAY_MS)
+    }
+}
 
 sealed interface ImportState {
     /** [seconds]: verstrichene Wartezeit, damit bei einem 71s-Import sichtbar bleibt,
@@ -293,10 +322,10 @@ class ShareActivity : ComponentActivity() {
                     // Instagram/TikTok/YouTube: die Caption bzw. Beschreibung holt weiter
                     // die App — sie hat die Links aus dem Share-Intent.
                     socialUrl != null ->
-                        dashboard.parse(RecipeLinkResolver(httpClient).resolve(socialUrl), socialUrl)
+                        startAndPoll(dashboard, RecipeLinkResolver(httpClient).resolve(socialUrl), socialUrl)
                     // Web-Portal: roh ans Dashboard, das löst es ohne LLM aus dem Markup.
-                    shareUrl != null -> dashboard.parse("", shareUrl)
-                    else -> dashboard.parse(source, null)
+                    shareUrl != null -> startAndPoll(dashboard, "", shareUrl)
+                    else -> startAndPoll(dashboard, source, null)
                 }
                 persistDraft(draft)
                 state.value = ImportState.Preview(draft)
