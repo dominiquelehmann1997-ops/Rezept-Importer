@@ -126,33 +126,15 @@ class ShareActivity : ComponentActivity() {
                         .safeDrawingPadding(),
                 ) {
                     when (val s = state.value) {
-                        // Kein eigener "Working"-Zustand mehr: startImport() übergibt
-                        // schnell an den Worker (kein Warten auf die Extraktion), bis
-                        // dahin genügt ein schlichter Ladehinweis.
+                        // Kein eigener "Working"-Zustand, keine Fortschrittsanzeige — die
+                        // Benachrichtigung ist das Signal. Nur ein Logo als Splash, wie
+                        // jede Activity es beim Start zeigt, bis startImport() fertig ist.
                         null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                            ArcaneCard(Modifier.padding(24.dp)) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Image(
-                                        painterResource(R.drawable.obsididine_logo),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(80.dp),
-                                    )
-                                    Spacer(Modifier.height(16.dp))
-                                    LinearProgressIndicator(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        trackColor = MaterialTheme.colorScheme.outline,
-                                    )
-                                    Spacer(Modifier.height(16.dp))
-                                    Text(
-                                        "Rezept wird übergeben",
-                                        style = MaterialTheme.typography.titleMedium,
-                                    )
-                                }
-                            }
+                            Image(
+                                painterResource(R.drawable.obsididine_logo),
+                                contentDescription = null,
+                                modifier = Modifier.size(80.dp),
+                            )
                         }
                         is ImportState.Preview -> PreviewScreen(
                             initial = s.draft,
