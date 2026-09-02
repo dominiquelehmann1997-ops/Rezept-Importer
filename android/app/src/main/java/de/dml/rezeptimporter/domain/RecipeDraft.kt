@@ -50,6 +50,8 @@ data class RecipeDraft(
     val reheatable: Boolean = false,
     /** Heuristisch aus den Zutaten gesetzt (kein Fleisch/Fisch ⇒ true), im Preview togglebar. */
     val vegetarian: Boolean = true,
+    /** "hauptmahlzeit" | "snack" | "suesses"; vom Server geraten, hier korrigierbar. */
+    val category: String = "hauptmahlzeit",
     /** Vom Server vergebener Identitäts-Anker; leer bei handgetipptem Namen. */
     val slug: String? = null,
     /** Quell-URL, falls der Import von einem Link kam. */

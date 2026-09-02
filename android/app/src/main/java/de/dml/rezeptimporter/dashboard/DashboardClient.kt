@@ -20,6 +20,11 @@ data class SaveResult(val id: String, val name: String, val updated: Boolean)
 
 private const val VEGETARIAN_TAG = "vegetarisch"
 
+private val CATEGORIES = listOf("hauptmahlzeit", "snack", "suesses")
+
+private fun normalizeCategory(raw: String?): String =
+    if (raw in CATEGORIES) raw!! else "hauptmahlzeit"
+
 // Der Import läuft serverseitig als Job (siehe Task 7): die App startet ihn und
 // pollt den Status, statt an einer einzigen HTTP-Verbindung bis zu 71s zu hängen —
 // gefährlich nah am ~100s-Limit der Cloudflare-Edge.
@@ -155,6 +160,7 @@ class DashboardClient(
             simple = r["simple"]?.jsonPrimitive?.booleanOrNull ?: true,
             reheatable = r["reheatable"]?.jsonPrimitive?.booleanOrNull ?: false,
             vegetarian = tags.any { it.equals(VEGETARIAN_TAG, ignoreCase = true) },
+            category = normalizeCategory(r["category"]?.jsonPrimitive?.contentOrNull),
             slug = r["slug"]?.jsonPrimitive?.contentOrNull,
             sourceUrl = r["source"]?.jsonPrimitive?.contentOrNull,
             imageUrl = r["imageUrl"]?.jsonPrimitive?.contentOrNull,
@@ -175,6 +181,7 @@ class DashboardClient(
         }
         put("source", draft.sourceUrl)
         put("imageUrl", draft.imageUrl)
+        put("category", draft.category)
         put("servings", draft.servings)
         put("prepMinutes", draft.prepMinutes)
         put("cookMinutes", draft.cookMinutes)

@@ -107,6 +107,25 @@ fun PreviewScreen(
                     )
                     Text("vegetarisch", style = MaterialTheme.typography.bodyMedium)
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    listOf(
+                        "hauptmahlzeit" to "Hauptmahlzeit",
+                        "snack" to "Snack",
+                        "suesses" to "Süßes",
+                    ).forEach { (value, label) ->
+                        FilterChip(
+                            selected = draft.category == value,
+                            onClick = { draft = draft.copy(category = value) },
+                            label = { Text(label) },
+                            shape = ArcaneShape,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
+                }
             }
         }
 

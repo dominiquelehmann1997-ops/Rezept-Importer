@@ -235,4 +235,36 @@ class DashboardClientTest {
         assertEquals("https://example.com/dal", recipe["source"]?.jsonPrimitive?.contentOrNull)
         server.shutdown()
     }
+
+    @Test
+    fun `parse liest die Kategorie, save schickt sie zurueck`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(202).setBody("""{"ok":true,"jobId":"j1"}"""))
+        server.enqueue(
+            MockResponse().setBody("""{"ok":true,"status":"done","recipe":{"name":"Kekse","category":"suesses","steps":[],"ingredients":[]}}""")
+        )
+        server.start()
+
+        val draft = client(server).parse("x", null)
+        assertEquals("suesses", draft.category)
+
+        server.enqueue(MockResponse().setBody("""{"ok":true,"id":"1","name":"Kekse"}"""))
+        client(server).save(draft)
+        server.takeRequest(); server.takeRequest()
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"category\":\"suesses\""))
+        server.shutdown()
+    }
+
+    @Test
+    fun `unbekannte Kategorie wird zur Hauptmahlzeit`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(202).setBody("""{"ok":true,"jobId":"j1"}"""))
+        server.enqueue(
+            MockResponse().setBody("""{"ok":true,"status":"done","recipe":{"name":"X","category":"nachtisch","steps":[],"ingredients":[]}}""")
+        )
+        server.start()
+
+        assertEquals("hauptmahlzeit", client(server).parse("x", null).category)
+        server.shutdown()
+    }
 }
