@@ -20,6 +20,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.lifecycleScope
 import de.dml.rezeptimporter.R
 import de.dml.rezeptimporter.dashboard.DashboardClient
+import de.dml.rezeptimporter.dashboard.JobResult
 import de.dml.rezeptimporter.dashboard.StartResult
 import de.dml.rezeptimporter.domain.RecipeDraft
 import de.dml.rezeptimporter.draft.DraftStore
@@ -65,19 +66,19 @@ class ShareActivity : ComponentActivity() {
     // Aufräumen in save() (Entwurf aus dem DraftStore, Benachrichtigung wegwischen).
     private var reviewJobId: String? = null
 
-    // LLM-Calls können >10s dauern, die Extraktion macht bis zu zwei — der Server
-    // begrenzt sie serverseitig auf ~90s (siehe recipeExtract.ts), damit SEINE
-    // Fehlermeldung (401, "keine Rezeptdaten" o.ä.) uns erreicht, statt dass der
-    // Client zuerst aufgibt und nur einen Netzwerkfehler zeigt, obwohl das
-    // Abo-Kontingent schon verbraucht ist. 120s hier ist also eine Obergrenze,
-    // kein Versprechen — ein Cloudflare-Tunnel kappt ohnehin bei ~100s.
+    /** Eigene Prefs-Datei, bewusst nicht über `AppSettings` (siehe `DraftStore.of`). */
+    private val drafts: DraftStore by lazy { DraftStore.of(this) }
+
+    // Auf die Extraktion warten macht der Worker; hier laufen nur noch kurze
+    // Aufrufe: Caption-/Link-Auflösung (RecipeLinkResolver), `startParse` (der
+    // Server antwortet in ~0,1s mit einer Job-Id), der einmalige `pollJob` beim
+    // Einstieg über eine Job-Id und `save`. Die 120s sind also eine großzügige
+    // Obergrenze, kein Versprechen — ein Cloudflare-Tunnel kappt ohnehin früher.
     //
-    // readTimeout MUSS mitgesetzt werden: callTimeout deckelt nur die Gesamtdauer,
-    // der Default für die einzelne Socket-Lese bleibt sonst bei 10s. /api/recipes/parse
-    // schickt bis zur fertigen Extraktion kein einziges Byte (gemessen: 42s für eine
-    // HelloFresh-Karte) — mit dem Default bricht OkHttp nach 10s mit
-    // SocketTimeoutException("timeout") ab, was in der App als
-    // "Dashboard nicht erreichbar: timeout" landet.
+    // readTimeout bleibt trotzdem mitgesetzt: callTimeout deckelt nur die
+    // Gesamtdauer, der Default für die einzelne Socket-Lese läge sonst bei 10s —
+    // eine zähe Social-Media-Seite bräche dann als
+    // SocketTimeoutException("timeout") ab statt zu Ende zu laden.
     private val httpClient = OkHttpClient.Builder()
         .callTimeout(120, TimeUnit.SECONDS)
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -102,10 +103,11 @@ class ShareActivity : ComponentActivity() {
         when {
             restoredDraft != null -> state.value = ImportState.Preview(restoredDraft)
             jobId != null -> {
-                // Einstieg aus der Benachrichtigung: Entwurf liegt lokal.
-                val draft = DraftStore(settings.notificationPrefs).get(jobId)
-                state.value = if (draft != null) ImportState.Preview(draft)
-                else ImportState.Error("Import abgelaufen — bitte erneut teilen.")
+                // Einstieg aus der Benachrichtigung oder aus der Liste in MainActivity:
+                // Entwurf liegt normalerweise lokal.
+                val draft = drafts.get(jobId)
+                if (draft != null) state.value = ImportState.Preview(draft)
+                else loadDraftFromServer(jobId)
             }
             else -> startImport()
         }
@@ -139,7 +141,7 @@ class ShareActivity : ComponentActivity() {
                         is ImportState.Preview -> PreviewScreen(
                             initial = s.draft,
                             onSave = ::save,
-                            onCancel = { clearPhotoCache(); finish() },
+                            onCancel = ::discard,
                         )
                         is ImportState.Error -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                             ArcaneCard(Modifier.padding(24.dp)) {
@@ -168,9 +170,7 @@ class ShareActivity : ComponentActivity() {
                             title = { Text("Rezept verwerfen?") },
                             text = { Text("Das extrahierte Rezept wird nicht gespeichert.") },
                             confirmButton = {
-                                TextButton(onClick = { clearPhotoCache(); finish() }) {
-                                    Text("Verwerfen")
-                                }
+                                TextButton(onClick = ::discard) { Text("Verwerfen") }
                             },
                             dismissButton = {
                                 TextButton(onClick = { showDiscardDialog.value = false }) {
@@ -227,13 +227,7 @@ class ShareActivity : ComponentActivity() {
                 // holt weiter die App (sie hat den Link aus dem Share-Intent), ein reiner
                 // Web-Link geht roh ans Dashboard, das ihn ohne LLM auflöst.
                 val shareUrl = extractShareUrl(source)
-                val dashboard = DashboardClient(
-                    baseUrl = settings.dashboardUrl,
-                    token = settings.importToken,
-                    cfClientId = settings.cfClientId,
-                    cfClientSecret = settings.cfClientSecret,
-                    client = httpClient,
-                )
+                val dashboard = dashboard()
                 val socialUrl = shareUrl?.takeIf { LinkHosts.isSocial(it) || LinkHosts.isYouTube(it) }
                 val start = when {
                     socialUrl != null ->
@@ -245,7 +239,7 @@ class ShareActivity : ComponentActivity() {
                 when (start) {
                     is StartResult.Started -> {
                         ImportStatusWorker.enqueue(this@ShareActivity, start.jobId, settings)
-                        DraftStore(settings.notificationPrefs).sweep()
+                        drafts.sweep()
                         Toast.makeText(
                             this@ShareActivity,
                             "An Cockpit übergeben — Benachrichtigung folgt",
@@ -284,18 +278,45 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
+    private fun dashboard() = DashboardClient(
+        baseUrl = settings.dashboardUrl,
+        token = settings.importToken,
+        cfClientId = settings.cfClientId,
+        cfClientSecret = settings.cfClientSecret,
+        client = httpClient,
+    )
+
+    /**
+     * Fehlt der lokale Entwurf (App neu installiert, Daten gelöscht), wird genau
+     * einmal der Server gefragt — kein zweiter Versuch, keine Schleife. Ist der Job
+     * auch dort weg, bleibt nur erneutes Teilen.
+     */
+    private fun loadDraftFromServer(jobId: String) {
+        val expired = ImportState.Error("Import abgelaufen — bitte erneut teilen.")
+        if (settings.dashboardUrl.isBlank() || settings.importToken.isBlank()) {
+            state.value = expired
+            return
+        }
+        lifecycleScope.launch {
+            val job = runCatching { dashboard().pollJob(jobId) }.getOrNull()
+            state.value = if (job is JobResult.Done) {
+                drafts.put(jobId, job.draft)
+                ImportState.Preview(job.draft)
+            } else expired
+        }
+    }
+
     private fun save(draft: RecipeDraft) {
         lifecycleScope.launch {
             try {
-                val result = DashboardClient(
-                    baseUrl = settings.dashboardUrl,
-                    token = settings.importToken,
-                    cfClientId = settings.cfClientId,
-                    cfClientSecret = settings.cfClientSecret,
-                    client = httpClient,
-                ).save(draft)
+                // Sofort die bearbeitete Fassung sichern, nicht erst nach Erfolg:
+                // scheitert das Speichern (Token abgelaufen, Dashboard aus) und der
+                // Prozess stirbt danach, lägen sonst wieder die unbearbeiteten Daten
+                // des Workers im Store — alle Korrekturen wären weg.
+                reviewJobId?.let { drafts.put(it, draft) }
+                val result = dashboard().save(draft)
                 reviewJobId?.let {
-                    DraftStore(settings.notificationPrefs).remove(it)
+                    drafts.remove(it)
                     NotificationManagerCompat.from(this@ShareActivity).cancel(it.hashCode())
                 }
                 Toast.makeText(
@@ -312,6 +333,20 @@ class ShareActivity : ComponentActivity() {
                 saveError.value = "Speichern fehlgeschlagen: ${e.message}"
             }
         }
+    }
+
+    /**
+     * Verwerfen heißt weg: sonst taucht das Rezept in der Liste der fertigen
+     * Importe in `MainActivity` wieder auf, obwohl der Nutzer es abgelehnt hat.
+     * Spiegelt das Aufräumen aus `save()`.
+     */
+    private fun discard() {
+        reviewJobId?.let {
+            drafts.remove(it)
+            NotificationManagerCompat.from(this).cancel(it.hashCode())
+        }
+        clearPhotoCache()
+        finish()
     }
 
     /** In-App aufgenommene Fotos (cache/fotos/) nach dem Import aufräumen. */
