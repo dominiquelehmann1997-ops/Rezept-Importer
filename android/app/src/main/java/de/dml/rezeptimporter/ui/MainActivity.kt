@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import de.dml.rezeptimporter.R
+import de.dml.rezeptimporter.domain.RecipeDraft
+import de.dml.rezeptimporter.draft.DraftStore
 import de.dml.rezeptimporter.settings.AppSettings
 import de.dml.rezeptimporter.ui.theme.ArcaneCard
 import de.dml.rezeptimporter.ui.theme.ArcaneCardTitle
@@ -67,6 +70,13 @@ class MainActivity : ComponentActivity() {
     private val photoUris = mutableStateListOf<Uri>()
     private var pendingPhotoUri: Uri? = null
 
+    private val drafts: DraftStore by lazy { DraftStore.of(this) }
+
+    // Fertige, noch nicht abgenickte Importe. Ohne diese Liste wäre ein Rezept nur
+    // über die Benachrichtigung erreichbar — ist die verweigert oder abgeschaltet,
+    // läge es unsichtbar im Store, bis `sweep` es nach 7 Tagen wegwirft.
+    private val pendingDrafts = mutableStateOf<List<Pair<String, RecipeDraft>>>(emptyList())
+
     private val takePicture =
         registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
             val uri = pendingPhotoUri
@@ -98,6 +108,21 @@ class MainActivity : ComponentActivity() {
             return
         }
         requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Neu einlesen statt einmalig: ein in der Vorschau gespeicherter oder
+        // verworfener Entwurf muss beim Zurückkommen aus der Liste verschwinden.
+        pendingDrafts.value = drafts.pending()
+    }
+
+    /** Öffnet dieselbe Vorschau wie die Benachrichtigung, nur ohne sie. */
+    private fun openDraft(jobId: String) {
+        startActivity(
+            Intent(this, ShareActivity::class.java)
+                .putExtra(ShareActivity.EXTRA_JOB_ID, jobId)
+        )
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -213,6 +238,9 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    if (screen == Screen.HOME && pendingDrafts.value.isNotEmpty()) {
+                        PendingDraftsCard(pendingDrafts.value, onOpen = ::openDraft)
+                    }
                     when (screen) {
                         Screen.HOME -> HomeScreen(
                             photoCount = photoUris.size,
@@ -269,6 +297,41 @@ private fun Header(screen: Screen, dark: Boolean, onToggle: () -> Unit) {
                 contentDescription = if (screen == Screen.HOME) "Einstellungen" else "Zurück",
                 tint = MaterialTheme.colorScheme.primary,
             )
+        }
+    }
+}
+
+/**
+ * Fertige Importe, die noch auf das Abnicken warten — je Eintrag eine Zeile, die
+ * dieselbe Vorschau öffnet wie die Benachrichtigung. Bewusst ohne Fortschritt,
+ * Status oder Wiederholen: laufende Importe zeigt diese Liste nicht.
+ */
+@Composable
+private fun PendingDraftsCard(drafts: List<Pair<String, RecipeDraft>>, onOpen: (String) -> Unit) {
+    ArcaneCard {
+        ArcaneCardTitle("Fertige Importe", tag = "[${drafts.size}]")
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Antippen zum Prüfen und Speichern.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        drafts.forEach { (jobId, draft) ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen(jobId) }
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ArcaneTag("◆", color = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    draft.name.ifBlank { "Ohne Namen" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                ArcaneTag("[PRÜFEN]", color = MaterialTheme.colorScheme.primary)
+            }
         }
     }
 }
