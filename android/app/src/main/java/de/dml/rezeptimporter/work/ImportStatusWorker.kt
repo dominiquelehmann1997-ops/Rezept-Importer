@@ -14,6 +14,7 @@ import de.dml.rezeptimporter.dashboard.JobResult
 import de.dml.rezeptimporter.domain.RecipeDraft
 import de.dml.rezeptimporter.draft.DraftStore
 import de.dml.rezeptimporter.notify.AndroidNotifier
+import de.dml.rezeptimporter.notify.ImportNotifier
 import de.dml.rezeptimporter.settings.AppSettings
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
@@ -38,6 +39,46 @@ fun outcomeOf(job: JobResult, expired: Boolean): ImportOutcome = when (job) {
 private const val POLL_INTERVAL_MS = 5_000L
 private const val MAX_WAIT_MS = 300_000L
 
+/**
+ * Die Verfolgungsschleife selbst — ohne Android, damit sie testbar ist: Uhr,
+ * Warten, Abfrage und die beiden Mitspieler kommen von außen. Der Worker baut
+ * die echten Ausprägungen und reicht sie herein.
+ */
+suspend fun trackImport(
+    jobId: String,
+    drafts: DraftStore,
+    notifier: ImportNotifier,
+    now: () -> Long = System::currentTimeMillis,
+    sleep: suspend () -> Unit = { delay(POLL_INTERVAL_MS) },
+    poll: suspend () -> JobResult,
+) {
+    val deadline = now() + MAX_WAIT_MS
+    while (true) {
+        // Ein einzelner fehlgeschlagener Blick (Netz kurz weg, Tunnel zickt)
+        // darf den Import nicht abschießen — der Job läuft serverseitig weiter.
+        val job = runCatching { poll() }.getOrDefault(JobResult.Pending)
+
+        when (val outcome = outcomeOf(job, expired = now() > deadline)) {
+            is ImportOutcome.Done -> {
+                // Erst ablegen, dann melden: danach ist die Benachrichtigung
+                // unabhängig davon, ob der Job auf dem Server noch existiert.
+                drafts.put(jobId, outcome.draft)
+                notifier.done(jobId, outcome.draft.name)
+                return
+            }
+            is ImportOutcome.Failed -> {
+                notifier.failed(jobId, outcome.message)
+                return
+            }
+            ImportOutcome.Unclear -> {
+                notifier.unclear(jobId)
+                return
+            }
+            ImportOutcome.KeepWaiting -> sleep()
+        }
+    }
+}
+
 class ImportStatusWorker(
     context: Context,
     params: WorkerParameters,
@@ -55,34 +96,13 @@ class ImportStatusWorker(
                 .readTimeout(30, TimeUnit.SECONDS)
                 .build(),
         )
-        val drafts = DraftStore(AppSettings(applicationContext).notificationPrefs)
-        val notifier = AndroidNotifier(applicationContext)
-
-        val deadline = System.currentTimeMillis() + MAX_WAIT_MS
-        while (true) {
-            // Ein einzelner fehlgeschlagener Blick (Netz kurz weg, Tunnel zickt)
-            // darf den Import nicht abschießen — der Job läuft serverseitig weiter.
-            val job = runCatching { client.pollJob(jobId) }.getOrDefault(JobResult.Pending)
-
-            when (val outcome = outcomeOf(job, expired = System.currentTimeMillis() > deadline)) {
-                is ImportOutcome.Done -> {
-                    // Erst ablegen, dann melden: danach ist die Benachrichtigung
-                    // unabhängig davon, ob der Job auf dem Server noch existiert.
-                    drafts.put(jobId, outcome.draft)
-                    notifier.done(jobId, outcome.draft.name)
-                    return Result.success()
-                }
-                is ImportOutcome.Failed -> {
-                    notifier.failed(jobId, outcome.message)
-                    return Result.success()
-                }
-                ImportOutcome.Unclear -> {
-                    notifier.unclear(jobId)
-                    return Result.success()
-                }
-                ImportOutcome.KeepWaiting -> delay(POLL_INTERVAL_MS)
-            }
-        }
+        trackImport(
+            jobId = jobId,
+            drafts = DraftStore.of(applicationContext),
+            notifier = AndroidNotifier(applicationContext),
+            poll = { client.pollJob(jobId) },
+        )
+        return Result.success()
     }
 
     companion object {
