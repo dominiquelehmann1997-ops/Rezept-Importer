@@ -44,8 +44,11 @@ class AndroidNotifier(private val context: Context) : ImportNotifier {
             .setAutoCancel(true)
 
         if (openPreview) {
+            // Nur NEW_TASK: CLEAR_TASK würde die laufende App abräumen — MainActivity
+            // samt Zustand wäre weg, und das `finish()` nach dem Speichern landete auf
+            // dem Startbildschirm statt zurück in der App.
             val intent = Intent(context, ShareActivity::class.java)
-                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .putExtra(ShareActivity.EXTRA_JOB_ID, jobId)
             builder.setContentIntent(
                 PendingIntent.getActivity(
